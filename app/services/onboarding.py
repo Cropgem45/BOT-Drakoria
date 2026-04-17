@@ -24,7 +24,16 @@ class OnboardingService:
 
         whitelist_status = await self.bot.db.get_whitelist_status(interaction.guild_id, interaction.user.id)
         if whitelist_status and whitelist_status["status"] == "approved":
-            raise RuntimeError("Tua entrada ja foi aprovada. Nao ha necessidade de enviar novo pergaminho.")
+            approved_role = None
+            if interaction.guild:
+                approved_role = interaction.guild.get_role(self.bot.server_map.role("approved") or 0)
+            has_approved_role = bool(
+                approved_role
+                and isinstance(interaction.user, discord.Member)
+                and approved_role in interaction.user.roles
+            )
+            if has_approved_role:
+                raise RuntimeError("Tua entrada ja foi aprovada. Nao ha necessidade de enviar novo pergaminho.")
 
         application_id = await self.bot.db.upsert_application(interaction.guild_id, interaction.user.id, answers)
         review_channel_id = self.bot.server_map.channel("onboarding_review")

@@ -134,7 +134,9 @@ class MemberRegistrationService:
 
         async with self._member_lock(member.id):
             latest = await self.bot.db.get_latest_member_registration_session(interaction.guild.id, member.id)
-            if latest and str(latest.get("status")) == "completed":
+            member_role = interaction.guild.get_role(self.bot.server_map.member_registration_member_role_id() or 0)
+            has_member_role = bool(member_role and member_role in member.roles)
+            if latest and str(latest.get("status")) == "completed" and has_member_role:
                 await self._dispatch_log(
                     title="Tentativa Duplicada de Cadastro",
                     description=f"{member.mention} tentou iniciar cadastro já concluído.",

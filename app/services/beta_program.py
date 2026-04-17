@@ -1,10 +1,12 @@
 ﻿from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -386,80 +388,148 @@ class BetaProgramService:
         await message.edit(embed=embed, view=view)
 
     async def generate_tester_card(self, member: discord.Member, application_id: int) -> tuple[bytes, str]:
-        width, height = 1400, 820
-        issued_at = datetime.now(UTC).strftime("%d/%m/%Y")
+        width, height = 1500, 900
+        issued_at = datetime.now(UTC)
+        issued_label = issued_at.strftime("%d/%m/%Y %H:%M UTC")
+        joined_label = (
+            member.joined_at.astimezone(UTC).strftime("%d/%m/%Y")
+            if member.joined_at is not None
+            else "-"
+        )
+        protocol = f"BT-{application_id:06d}"
+        auth_code = self._card_auth_code(member.id, application_id)
 
-        card = Image.new("RGBA", (width, height), (12, 8, 24, 255))
+        card = Image.new("RGBA", (width, height), (9, 14, 30, 255))
         draw = ImageDraw.Draw(card)
-        for i in range(height):
-            ratio = i / max(height - 1, 1)
-            r = int(14 + (40 - 14) * ratio)
-            g = int(10 + (24 - 10) * ratio)
-            b = int(30 + (62 - 30) * ratio)
-            draw.line([(0, i), (width, i)], fill=(r, g, b, 255))
+        for y in range(height):
+            ratio = y / max(height - 1, 1)
+            r = int(10 + (38 - 10) * ratio)
+            g = int(14 + (16 - 14) * ratio)
+            b = int(35 + (56 - 35) * ratio)
+            draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
 
-        draw.rounded_rectangle((26, 26, width - 26, height - 26), radius=34, outline=(227, 194, 110, 255), width=4)
-        draw.rounded_rectangle((56, 56, width - 56, height - 56), radius=28, outline=(104, 77, 151, 180), width=2)
+        glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        glow_draw = ImageDraw.Draw(glow)
+        glow_draw.ellipse((width - 640, -220, width + 260, 640), fill=(143, 100, 229, 78))
+        glow_draw.ellipse((-300, 420, 540, 1120), fill=(48, 166, 221, 54))
+        card = Image.alpha_composite(card, glow)
+        draw = ImageDraw.Draw(card)
 
-        title_font = self._load_font(56, bold=True)
-        subtitle_font = self._load_font(30, bold=False)
-        label_font = self._load_font(30, bold=False)
-        value_font = self._load_font(40, bold=True)
-        small_font = self._load_font(24, bold=False)
-        badge_font = self._load_font(34, bold=True)
+        for x in range(-height, width, 36):
+            draw.line((x, 0, x + height, height), fill=(255, 255, 255, 11), width=1)
 
-        draw.text((96, 96), "Carteirinha Oficial de Beta Tester", fill=(246, 230, 173, 255), font=title_font)
-        draw.text((98, 164), "Programa Beta Drakoria", fill=(191, 170, 233, 255), font=subtitle_font)
+        draw.rounded_rectangle((22, 22, width - 22, height - 22), radius=36, fill=(8, 13, 30, 212), outline=(230, 195, 113, 255), width=4)
+        draw.rounded_rectangle((44, 44, width - 44, height - 44), radius=30, outline=(92, 139, 213, 155), width=2)
+        draw.rounded_rectangle((66, 66, width - 66, 142), radius=22, fill=(17, 27, 53, 235), outline=(224, 190, 110, 155), width=2)
+
+        title_font = self._load_font(48, bold=True)
+        subtitle_font = self._load_font(24, bold=False)
+        section_font = self._load_font(22, bold=False)
+        hero_font = self._load_font(42, bold=True)
+        value_font = self._load_font(30, bold=False)
+        small_font = self._load_font(22, bold=False)
+        status_font = self._load_font(30, bold=True)
+        code_font = self._load_font(24, bold=True)
+
+        draw.text((96, 84), "CARTEIRINHA OFICIAL BETA TESTER", fill=(246, 229, 173, 255), font=title_font)
+        draw.text((98, 124), "Drakoria | Nexar | Programa de Validacao Tecnica", fill=(167, 208, 255, 255), font=subtitle_font)
+
         logo = await self._load_brand_logo_image()
         if logo is not None:
-            logo_size = 176
-            logo = ImageOps.fit(logo, (logo_size, logo_size), method=Image.Resampling.LANCZOS)
-            x = width - 100 - logo_size
-            y = 92
-            badge_bg = Image.new("RGBA", (logo_size + 24, logo_size + 24), (18, 12, 34, 220))
-            badge_mask = Image.new("L", badge_bg.size, 0)
-            badge_draw = ImageDraw.Draw(badge_mask)
-            badge_draw.rounded_rectangle((0, 0, badge_bg.width - 1, badge_bg.height - 1), radius=26, fill=255)
-            card.paste(badge_bg, (x - 12, y - 12), badge_mask)
-            card.paste(logo, (x, y), logo)
+            watermark_size = 420
+            watermark = ImageOps.fit(logo, (watermark_size, watermark_size), method=Image.Resampling.LANCZOS)
+            watermark.putalpha(36)
+            card.paste(watermark, (1020, 260), watermark)
+            emblem_size = 116
+            emblem = ImageOps.fit(logo, (emblem_size, emblem_size), method=Image.Resampling.LANCZOS)
+            emblem_x, emblem_y = width - 194, 82
             draw.rounded_rectangle(
-                (x - 12, y - 12, x + logo_size + 12, y + logo_size + 12),
-                radius=26,
-                outline=(228, 193, 113, 220),
+                (emblem_x - 14, emblem_y - 14, emblem_x + emblem_size + 14, emblem_y + emblem_size + 14),
+                radius=24,
+                fill=(13, 21, 43, 240),
+                outline=(229, 196, 114, 230),
                 width=3,
             )
+            card.paste(emblem, (emblem_x, emblem_y), emblem)
 
-        avatar_box = (94, 236, 434, 576)
-        draw.rounded_rectangle(avatar_box, radius=40, fill=(33, 22, 55, 255), outline=(228, 193, 113, 255), width=4)
+        left_panel = (78, 176, 484, 822)
+        draw.rounded_rectangle(left_panel, radius=30, fill=(15, 24, 48, 238), outline=(226, 193, 113, 215), width=3)
+        draw.text((112, 206), "IDENTIDADE DO TESTER", fill=(178, 214, 255, 255), font=section_font)
+
+        avatar_size = 300
+        avatar_x = left_panel[0] + (left_panel[2] - left_panel[0] - avatar_size) // 2
+        avatar_y = 262
+        draw.ellipse((avatar_x - 12, avatar_y - 12, avatar_x + avatar_size + 12, avatar_y + avatar_size + 12), fill=(6, 11, 26, 230))
+        draw.ellipse((avatar_x - 14, avatar_y - 14, avatar_x + avatar_size + 14, avatar_y + avatar_size + 14), outline=(232, 198, 118, 245), width=4)
+
         avatar_asset = member.display_avatar.replace(format="png", size=512)
-        avatar_bytes = await avatar_asset.read()
-        avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
-        avatar = ImageOps.fit(avatar, (300, 300), method=Image.Resampling.LANCZOS)
-        mask = Image.new("L", (300, 300), 0)
+        avatar = Image.new("RGBA", (avatar_size, avatar_size), (48, 66, 104, 255))
+        try:
+            avatar_bytes = await avatar_asset.read()
+            avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+            avatar = ImageOps.fit(avatar, (avatar_size, avatar_size), method=Image.Resampling.LANCZOS)
+        except Exception:
+            pass
+
+        mask = Image.new("L", (avatar_size, avatar_size), 0)
         mask_draw = ImageDraw.Draw(mask)
-        mask_draw.ellipse((0, 0, 299, 299), fill=255)
-        avatar_circle = Image.new("RGBA", (300, 300), (0, 0, 0, 0))
+        mask_draw.ellipse((0, 0, avatar_size - 1, avatar_size - 1), fill=255)
+        avatar_circle = Image.new("RGBA", (avatar_size, avatar_size), (0, 0, 0, 0))
         avatar_circle.paste(avatar, (0, 0), mask)
-        card.paste(avatar_circle, (114, 256), avatar_circle)
+        card.paste(avatar_circle, (avatar_x, avatar_y), avatar_circle)
 
-        draw.text((490, 266), "NOME", fill=(172, 153, 211, 255), font=label_font)
-        draw.text((490, 304), member.display_name[:28], fill=(255, 255, 255, 255), font=value_font)
-        draw.text((490, 384), "ID DO TESTER", fill=(172, 153, 211, 255), font=label_font)
-        draw.text((490, 422), f"APROVADO", fill=(240, 220, 162, 255), font=value_font)
-        draw.text((490, 500), "USUÁRIO", fill=(172, 153, 211, 255), font=label_font)
-        draw.text((490, 538), str(member)[:28], fill=(227, 223, 238, 255), font=self._load_font(34, bold=False))
+        draw.rounded_rectangle((112, 594, 450, 790), radius=20, fill=(10, 17, 35, 240), outline=(92, 139, 213, 180), width=2)
+        draw.text((132, 620), "PROTOCOLO", fill=(163, 195, 241, 255), font=section_font)
+        draw.text((132, 652), protocol, fill=(248, 232, 176, 255), font=code_font)
+        draw.text((132, 698), "CODIGO", fill=(163, 195, 241, 255), font=section_font)
+        draw.text((132, 730), auth_code, fill=(226, 235, 251, 255), font=small_font)
 
-        badge_box = (490, 614, 1232, 706)
-        draw.rounded_rectangle(badge_box, radius=20, fill=(44, 27, 78, 255), outline=(231, 197, 115, 255), width=3)
-        draw.text((522, 644), "STATUS: APROVADO COMO BETA TESTER", fill=(248, 233, 176, 255), font=badge_font)
+        info_panel = (516, 176, width - 78, 822)
+        draw.rounded_rectangle(info_panel, radius=30, fill=(12, 21, 44, 226), outline=(92, 139, 213, 170), width=2)
 
-        draw.text((96, 744), f"Emitido em: {issued_at}", fill=(162, 145, 198, 255), font=small_font)
-        draw.text((1038, 744), "Drakoria", fill=(162, 145, 198, 255), font=small_font)
+        draw.text((552, 224), "PORTADOR", fill=(160, 195, 242, 255), font=section_font)
+        draw.text((552, 256), self._truncate_text(member.display_name, 28), fill=(255, 255, 255, 255), font=hero_font)
+
+        draw.text((552, 350), "USUARIO DISCORD", fill=(160, 195, 242, 255), font=section_font)
+        draw.text((552, 382), self._truncate_text(str(member), 32), fill=(226, 235, 251, 255), font=value_font)
+
+        draw.text((552, 458), "ID DISCORD", fill=(160, 195, 242, 255), font=section_font)
+        draw.text((552, 490), str(member.id), fill=(245, 247, 255, 255), font=value_font)
+
+        draw.text((980, 350), "EMISSAO", fill=(160, 195, 242, 255), font=section_font)
+        draw.text((980, 382), issued_label, fill=(226, 235, 251, 255), font=value_font)
+
+        draw.text((980, 458), "INGRESSO NO SERVIDOR", fill=(160, 195, 242, 255), font=section_font)
+        draw.text((980, 490), joined_label, fill=(245, 247, 255, 255), font=value_font)
+
+        status_box = (552, 588, width - 120, 674)
+        draw.rounded_rectangle(status_box, radius=20, fill=(27, 87, 56, 242), outline=(147, 232, 181, 255), width=3)
+        draw.text((582, 616), "STATUS OPERACIONAL: APROVADO COMO BETA TESTER", fill=(231, 255, 241, 255), font=status_font)
+
+        security_box = (552, 702, width - 120, 790)
+        draw.rounded_rectangle(security_box, radius=18, fill=(8, 14, 31, 240), outline=(227, 193, 113, 180), width=2)
+        draw.text((582, 726), f"AUTENTICACAO DIGITAL: {auth_code}", fill=(245, 230, 173, 255), font=code_font)
+        draw.text((582, 756), "Documento oficial do Programa Beta Drakoria. Uso interno de validacao.", fill=(174, 206, 250, 255), font=small_font)
 
         out = io.BytesIO()
         card.convert("RGB").save(out, format="PNG", optimize=True)
         out.seek(0)
         return out.getvalue(), f"drakoria-beta-card-{member.id}.png"
+
+    @staticmethod
+    def _card_auth_code(member_id: int, application_id: int) -> str:
+        payload = f"{member_id}:{application_id}".encode("utf-8")
+        digest = hashlib.sha1(payload).hexdigest()[:10].upper()
+        return f"DRK-{application_id:06d}-{digest}"
+
+    @staticmethod
+    def _truncate_text(text: str, max_chars: int) -> str:
+        value = text.strip()
+        if len(value) <= max_chars:
+            return value
+        if max_chars <= 3:
+            return value[:max_chars]
+        return value[: max_chars - 3].rstrip() + "..."
 
     async def _load_brand_logo_image(self) -> Image.Image | None:
         logo_url = self._brand_logo_url()
@@ -486,17 +556,44 @@ class BetaProgramService:
                 return value.strip()
         return self.bot.server_map.announcements_logo_url()
 
-    @staticmethod
-    def _download_logo_bytes(logo_url: str) -> bytes | None:
-        request = Request(
-            logo_url,
-            headers={"User-Agent": "DrakoriaBot/1.0"},
-        )
-        try:
-            with urlopen(request, timeout=8) as response:
-                return response.read()
-        except Exception:
+    def _download_logo_bytes(self, logo_url: str) -> bytes | None:
+        if logo_url.startswith(("http://", "https://")):
+            request = Request(
+                logo_url,
+                headers={"User-Agent": "DrakoriaBot/1.0"},
+            )
+            try:
+                with urlopen(request, timeout=8) as response:
+                    return response.read()
+            except Exception:
+                return None
+
+        local_path = self._resolve_local_logo_path(logo_url)
+        if local_path is None:
             return None
+        try:
+            return local_path.read_bytes()
+        except OSError:
+            return None
+
+    def _resolve_local_logo_path(self, logo_url: str) -> Path | None:
+        candidate = Path(logo_url.strip())
+        if candidate.is_absolute():
+            return candidate if candidate.exists() else None
+
+        base_dirs: list[Path] = [Path.cwd()]
+        runtime_config = getattr(getattr(self.bot, "runtime", None), "config_path", None)
+        if isinstance(runtime_config, Path):
+            base_dirs.extend([runtime_config.parent, runtime_config.parent.parent])
+
+        for base in base_dirs:
+            try:
+                resolved = (base / candidate).resolve()
+            except OSError:
+                continue
+            if resolved.exists():
+                return resolved
+        return None
 
     @staticmethod
     def _load_font(size: int, *, bold: bool) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

@@ -154,12 +154,8 @@ class RegistrationService:
                     "Revise `registration_panel.visitor_role_id`."
                 )
 
-            prior_record = await self.bot.db.get_registration_record(guild.id, member.id)
             already_has_role = registered_role in member.roles
-            already_registered = already_has_role or (
-                prior_record is not None and str(prior_record.get("status", "")).lower() in {"success", "already_registered"}
-            )
-            if already_registered:
+            if already_has_role:
                 await self.bot.db.upsert_registration_record(
                     guild.id,
                     member.id,
