@@ -1,0 +1,210 @@
+{
+  "guild": {
+    "id": 1486185045374013571
+  },
+  "style": {
+    "primary_color": "0xf1c40f",
+    "success_color": "0xf1c40f",
+    "warning_color": "0xf1c40f",
+    "error_color": "0xf1c40f",
+    "logo_url": "Images/Drakoria_Nexar_logo.png",
+    "footer_text": "Drakoria | Servidor Oficial",
+    "footer_icon_url": null
+  },
+  "channels": {
+    "welcome": 1487647453665693856,
+    "announcements": 1487647477623689297
+  },
+  "categories": {
+    "tickets": 1487647438058819717
+  },
+  "roles": {
+    "visitor": 1487647370408624149,
+    "support": 1487647350963835040
+  },
+  "logs": {
+    "channels": {
+      "tickets": 1487647509559120035,
+      "points": 1487647509559120035,
+      "announcements": 1487647509559120035
+    }
+  },
+  "permissions": {
+    "publish_panel": [1487647352096292864, 1487647338062151750],
+    "manage_tickets": [1487647350963835040, 1487647352096292864],
+    "manage_points": [1487647336816709868, 1487647344479699087, 1487647345448325210],
+    "manage_beta_program": [1487647336816709868, 1487647344479699087, 1487647345448325210, 1487647352096292864],
+    "publish_announcements": [1487647352096292864, 1487647338062151750],
+    "view_server_map": [1487647352096292864, 1487647338062151750]
+  },
+  "points": {
+    "reward_roles": {
+      "50": 123456789012345694,
+      "100": 123456789012345695
+    }
+  },
+  "voice_points": {
+    "enabled": true,
+    "panel_channel_id": 1487647499161309285,
+    "report_channel_id": 1487647501891670086,
+    "log_channel_id": 1487647509559120035,
+    "allowed_role_ids": [
+      1487647343556821104,
+      1487647336816709868,
+      1487647344479699087,
+      1487647345448325210,
+      1487647349269463050,
+      1487647350963835040,
+      1487647352096292864,
+      1487647336204210186
+    ],
+    "valid_voice_channel_ids": [
+      1487647439291940985,
+      1487647442328617170,
+      1487647443343376414,
+      1487647455028842506,
+      1487647457465729144,
+      1487647461009920060
+    ],
+    "channel_groups": {
+      "attendance_channels": [
+        1487647455028842506,
+        1487647457465729144,
+        1487647461009920060
+      ],
+      "meeting_channels": [
+        1487647439291940985
+      ],
+      "leadership_channels": [
+        1487647442328617170
+      ],
+      "development_channels": [
+        1487647443343376414
+      ]
+    },
+    "group_override_by_channel_id": {
+      "1487647439291940985": "meeting_channels",
+      "1487647442328617170": "leadership_channels",
+      "1487647443343376414": "development_channels",
+      "1487647455028842506": "attendance_channels",
+      "1487647457465729144": "attendance_channels",
+      "1487647461009920060": "attendance_channels"
+    },
+    "grace_period_seconds": 300
+  },
+  "tickets": {
+    "panel_channel_id": 1487647497135325215,
+    "category_id": 1487647438058819717,
+    "log_channel_id": 1487647509559120035,
+    "transcript_channel_id": 1487647509559120035,
+    "support_role_ids": [
+      1487647350963835040,
+      1487647352096292864,
+      1487647338062151750
+    ],
+    "allow_one_open_ticket_per_user": true,
+    "close_behavior": "delete",
+    "status_labels": {
+      "open": "Aberto",
+      "in_progress": "Em Atendimento",
+      "waiting_user": "Aguardando Usuario",
+      "closed": "Encerrado"
+    },
+    "ticket_types": [
+      {
+        "key": "bug_report",
+        "label": "Relato de Bug",
+        "description": "Reporte falhas, erros e comportamentos inesperados do servidor.",
+        "emoji": "🐞"
+      },
+      {
+        "key": "report",
+        "label": "Denuncia",
+        "description": "Registre condutas indevidas para avaliacao administrativa.",
+        "emoji": "⚖️"
+      },
+      {
+        "key": "general_question",
+        "label": "Duvida Geral",
+        "description": "Solicite esclarecimentos sobre sistemas, regras e fluxos do reino.",
+        "emoji": "📜"
+      },
+      {
+        "key": "account_issue",
+        "label": "Problema com Cadastro / Conta",
+        "description": "Resolva bloqueios, vinculos ou falhas ligadas ao teu cadastro.",
+        "emoji": "🗝️"
+      },
+      {
+        "key": "general_support",
+        "label": "Suporte Geral",
+        "description": "Abra um chamado amplo quando teu caso nao se encaixar nas demais categorias.",
+        "emoji": "🛡️"
+      }
+    ]
+  },
+  "announcements": {
+    "enabled": true,
+    "log_channel_id": 1487647509559120035,
+    "allowed_role_ids": [
+      1487647343556821104,
+      1487647336816709868,
+      1487647344479699087,
+      1487647345448325210,
+      1487647349269463050
+    ],
+    "embed_color": 15844367,
+    "logo_url": "Images/Drakoria_Nexar_logo.png",
+    "large_logo_url": "Images/Drakoria_Nexar_logo.png",
+    "default_footer": "Drakoria - Comunicacao Oficial"
+  },
+  "registration_panel": {
+    "enabled": true,
+    "panel_channel_id": 1487647444694073417,
+    "registered_role_id": 1487647369788133447,
+    "visitor_role_id": 1487647370408624149,
+    "log_channel_id": 1487647509559120035,
+    "rules_channel_ids": [
+      1487647459005173861,
+      1487647462993821757
+    ],
+    "remove_visitor_role_on_register": true
+  },
+  "member_registration": {
+    "enabled": true,
+    "panel_channel_id": 1487647469029556366,
+    "member_role_id": 1487647367208632350,
+    "log_channel_id": 1487647509559120035,
+    "completed_channel_id": 1487647471520714763,
+    "minimum_age": 16,
+    "rename_member_on_success": true,
+    "auto_reject_under_minimum_age": true
+  },
+  "management_dashboard": {
+    "enabled": true,
+    "dashboard_channel_id": 1490050125345722620,
+    "allowed_role_ids": [
+      1487647330986492189,
+      1487647331992997918,
+      1488678248220200991,
+      1487647332911681537,
+      1487647338062151750,
+      1487647336816709868
+    ],
+    "show_weekly_metrics": true,
+    "show_monthly_metrics": true,
+    "show_alerts": true
+  },
+  "beta_program": {
+    "enabled": true,
+    "panel_channel_id": 1487647464424210524,
+    "application_channel_id": 1487647467439657042,
+    "card_channel_id": 1487647466231824585,
+    "log_channel_id": 1487647509559120035,
+    "beta_role_id": 1487647368404008970,
+    "allow_reapply_after_rejection": true,
+    "send_dm_on_approval": true,
+    "send_dm_on_rejection": true,
+    "generate_tester_card": true
+  }
+}

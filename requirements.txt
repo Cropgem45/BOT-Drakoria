@@ -1,0 +1,4 @@
+discord.py[voice]>=2.5.0,<3.0.0
+python-dotenv>=1.0.1,<2.0.0
+aiosqlite>=0.20.0,<1.0.0
+Pillow>=12.2.0,<13.0.0
