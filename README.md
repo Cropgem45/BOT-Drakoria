@@ -112,6 +112,7 @@ Blocos principais:
 - Checklist final de producao: `docs/final_production_checklist.md`
 - Visao tecnica dos modulos: `docs/system_overview.md`
 - Checklist operacional rapido: `docs/operational_checklist.md`
+- Deploy 24/7 sem PC ligado (Oracle Free): `docs/oracle_free_deploy.md`
 
 ## Troubleshooting Rapido
 

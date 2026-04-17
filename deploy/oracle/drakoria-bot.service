@@ -1,0 +1,25 @@
+[Unit]
+Description=Bot Drakoria (Discord)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=drakoria
+Group=drakoria
+WorkingDirectory=/opt/drakoria-bot/app
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/opt/drakoria-bot/app/.env
+ExecStart=/opt/drakoria-bot/app/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/drakoria-bot/app/data /opt/drakoria-bot/app/logs
+StandardOutput=append:/opt/drakoria-bot/app/logs/bot.out.log
+StandardError=append:/opt/drakoria-bot/app/logs/bot.err.log
+
+[Install]
+WantedBy=multi-user.target
