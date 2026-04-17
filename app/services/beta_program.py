@@ -399,68 +399,115 @@ class BetaProgramService:
         protocol = f"BT-{application_id:06d}"
         auth_code = self._card_auth_code(member.id, application_id)
 
-        card = Image.new("RGBA", (width, height), (9, 14, 30, 255))
+        card = Image.new("RGBA", (width, height), (7, 6, 14, 255))
         draw = ImageDraw.Draw(card)
         for y in range(height):
             ratio = y / max(height - 1, 1)
-            r = int(10 + (38 - 10) * ratio)
-            g = int(14 + (16 - 14) * ratio)
-            b = int(35 + (56 - 35) * ratio)
+            r = int(6 + (24 - 6) * ratio)
+            g = int(6 + (10 - 6) * ratio)
+            b = int(14 + (46 - 14) * ratio)
             draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
 
         glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow)
-        glow_draw.ellipse((width - 640, -220, width + 260, 640), fill=(143, 100, 229, 78))
-        glow_draw.ellipse((-300, 420, 540, 1120), fill=(48, 166, 221, 54))
+        glow_draw.ellipse((width - 640, -220, width + 260, 640), fill=(132, 70, 188, 95))
+        glow_draw.ellipse((-360, 430, 560, 1160), fill=(244, 198, 77, 42))
         card = Image.alpha_composite(card, glow)
         draw = ImageDraw.Draw(card)
 
         for x in range(-height, width, 36):
-            draw.line((x, 0, x + height, height), fill=(255, 255, 255, 11), width=1)
+            draw.line((x, 0, x + height, height), fill=(236, 194, 74, 14), width=1)
 
-        draw.rounded_rectangle((22, 22, width - 22, height - 22), radius=36, fill=(8, 13, 30, 212), outline=(230, 195, 113, 255), width=4)
-        draw.rounded_rectangle((44, 44, width - 44, height - 44), radius=30, outline=(92, 139, 213, 155), width=2)
-        draw.rounded_rectangle((66, 66, width - 66, 142), radius=22, fill=(17, 27, 53, 235), outline=(224, 190, 110, 155), width=2)
+        outer = (22, 22, width - 22, height - 22)
+        inner = (44, 44, width - 44, height - 44)
+        header = (70, 70, width - 70, 198)
+        content_top = header[3] + 18
+        left_panel = (84, content_top, 484, 822)
+        right_panel = (504, content_top, width - 84, 822)
 
-        title_font = self._load_font(48, bold=True)
-        subtitle_font = self._load_font(24, bold=False)
-        section_font = self._load_font(22, bold=False)
-        hero_font = self._load_font(42, bold=True)
-        value_font = self._load_font(30, bold=False)
-        small_font = self._load_font(22, bold=False)
-        status_font = self._load_font(30, bold=True)
-        code_font = self._load_font(24, bold=True)
+        draw.rounded_rectangle(outer, radius=36, fill=(10, 8, 18, 228), outline=(236, 194, 74, 255), width=4)
+        draw.rounded_rectangle(inner, radius=30, outline=(131, 77, 192, 185), width=2)
+        draw.rounded_rectangle(header, radius=22, fill=(25, 14, 44, 240), outline=(228, 188, 75, 190), width=2)
+        draw.rounded_rectangle(left_panel, radius=30, fill=(19, 11, 36, 244), outline=(236, 194, 74, 220), width=3)
+        draw.rounded_rectangle(right_panel, radius=30, fill=(15, 10, 30, 238), outline=(131, 77, 192, 210), width=2)
 
-        draw.text((96, 84), "CARTEIRINHA OFICIAL BETA TESTER", fill=(246, 229, 173, 255), font=title_font)
-        draw.text((98, 124), "Drakoria | Nexar | Programa de Validacao Tecnica", fill=(167, 208, 255, 255), font=subtitle_font)
+        section_font = self._load_font(20, bold=False)
+        small_font = self._load_font(19, bold=False)
+        code_font = self._load_font(22, bold=True)
+        status_font = self._load_font(31, bold=True)
 
         logo = await self._load_brand_logo_image()
+        emblem_frame: tuple[int, int, int, int] | None = None
         if logo is not None:
-            watermark_size = 420
+            watermark_size = 300
             watermark = ImageOps.fit(logo, (watermark_size, watermark_size), method=Image.Resampling.LANCZOS)
-            watermark.putalpha(36)
-            card.paste(watermark, (1020, 260), watermark)
-            emblem_size = 116
+            watermark.putalpha(28)
+            watermark_x = right_panel[2] - watermark_size - 52
+            watermark_y = right_panel[1] + 110
+            card.paste(watermark, (watermark_x, watermark_y), watermark)
+
+            emblem_size = 100
             emblem = ImageOps.fit(logo, (emblem_size, emblem_size), method=Image.Resampling.LANCZOS)
-            emblem_x, emblem_y = width - 194, 82
+            emblem_frame_size = emblem_size + 24
+            emblem_margin_right = 26
+            emblem_margin_top = 22
+            frame_x2 = inner[2] - emblem_margin_right
+            frame_y1 = inner[1] + emblem_margin_top
+            emblem_frame = (
+                frame_x2 - emblem_frame_size,
+                frame_y1,
+                frame_x2,
+                frame_y1 + emblem_frame_size,
+            )
+            emblem_x = emblem_frame[0] + 12
+            emblem_y = emblem_frame[1] + 12
             draw.rounded_rectangle(
-                (emblem_x - 14, emblem_y - 14, emblem_x + emblem_size + 14, emblem_y + emblem_size + 14),
-                radius=24,
-                fill=(13, 21, 43, 240),
-                outline=(229, 196, 114, 230),
+                emblem_frame,
+                radius=22,
+                fill=(20, 11, 36, 244),
+                outline=(236, 194, 74, 230),
                 width=3,
             )
             card.paste(emblem, (emblem_x, emblem_y), emblem)
 
-        left_panel = (78, 176, 484, 822)
-        draw.rounded_rectangle(left_panel, radius=30, fill=(15, 24, 48, 238), outline=(226, 193, 113, 215), width=3)
-        draw.text((112, 206), "IDENTIDADE DO TESTER", fill=(178, 214, 255, 255), font=section_font)
+        title = "CARTEIRINHA OFICIAL BETA TESTER"
+        subtitle = "Drakoria | Nexar | Programa de Validacao Tecnica"
+        title_left = header[0] + 26
+        title_right = (emblem_frame[0] - 24) if emblem_frame else (header[2] - 26)
+        title_max_width = max(220, title_right - title_left)
+        title_font = self._fit_text_font(draw, title, max_width=title_max_width, preferred_size=48, min_size=36, bold=True)
+        subtitle_font = self._fit_text_font(draw, subtitle, max_width=title_max_width, preferred_size=24, min_size=18, bold=False)
+        title_h = self._text_dimensions(draw, title, title_font)[1]
+        subtitle_h = self._text_dimensions(draw, subtitle, subtitle_font)[1]
+        title_y = header[1] + 20
+        subtitle_y = title_y + title_h + 20
+        draw.text((title_left, title_y), title, fill=(250, 224, 145, 255), font=title_font)
+        draw.text((title_left, subtitle_y), subtitle, fill=(194, 154, 245, 255), font=subtitle_font)
+        line_y = subtitle_y + subtitle_h + 14
+        draw.line((title_left, line_y, title_right, line_y), fill=(232, 191, 82, 205), width=2)
 
-        avatar_size = 300
+        left_title = "IDENTIDADE DO TESTER"
+        left_title_font = self._fit_text_font(
+            draw,
+            left_title,
+            max_width=(left_panel[2] - left_panel[0] - 36),
+            preferred_size=20,
+            min_size=16,
+            bold=False,
+        )
+        left_title_w, left_title_h = self._text_dimensions(draw, left_title, left_title_font)
+        left_title_x = left_panel[0] + ((left_panel[2] - left_panel[0]) - left_title_w) // 2
+        left_title_y = left_panel[1] + 24
+        draw.text((left_title_x, left_title_y), left_title, fill=(228, 194, 108, 255), font=left_title_font)
+
+        avatar_size = 252
         avatar_x = left_panel[0] + (left_panel[2] - left_panel[0] - avatar_size) // 2
-        avatar_y = 262
-        draw.ellipse((avatar_x - 12, avatar_y - 12, avatar_x + avatar_size + 12, avatar_y + avatar_size + 12), fill=(6, 11, 26, 230))
-        draw.ellipse((avatar_x - 14, avatar_y - 14, avatar_x + avatar_size + 14, avatar_y + avatar_size + 14), outline=(232, 198, 118, 245), width=4)
+        protocol_box = (left_panel[0] + 24, left_panel[3] - 212, left_panel[2] - 24, left_panel[3] - 24)
+        avatar_area_top = left_title_y + left_title_h + 22
+        avatar_area_bottom = protocol_box[1] - 20
+        avatar_y = avatar_area_top + max(0, (avatar_area_bottom - avatar_area_top - avatar_size) // 2)
+        draw.ellipse((avatar_x - 12, avatar_y - 12, avatar_x + avatar_size + 12, avatar_y + avatar_size + 12), fill=(11, 8, 22, 236))
+        draw.ellipse((avatar_x - 14, avatar_y - 14, avatar_x + avatar_size + 14, avatar_y + avatar_size + 14), outline=(236, 194, 74, 245), width=4)
 
         avatar_asset = member.display_avatar.replace(format="png", size=512)
         avatar = Image.new("RGBA", (avatar_size, avatar_size), (48, 66, 104, 255))
@@ -478,38 +525,65 @@ class BetaProgramService:
         avatar_circle.paste(avatar, (0, 0), mask)
         card.paste(avatar_circle, (avatar_x, avatar_y), avatar_circle)
 
-        draw.rounded_rectangle((112, 594, 450, 790), radius=20, fill=(10, 17, 35, 240), outline=(92, 139, 213, 180), width=2)
-        draw.text((132, 620), "PROTOCOLO", fill=(163, 195, 241, 255), font=section_font)
-        draw.text((132, 652), protocol, fill=(248, 232, 176, 255), font=code_font)
-        draw.text((132, 698), "CODIGO", fill=(163, 195, 241, 255), font=section_font)
-        draw.text((132, 730), auth_code, fill=(226, 235, 251, 255), font=small_font)
+        draw.rounded_rectangle(protocol_box, radius=18, fill=(12, 8, 24, 242), outline=(131, 77, 192, 205), width=2)
+        px = protocol_box[0] + 18
+        draw.text((px, protocol_box[1] + 14), "PROTOCOLO", fill=(226, 190, 100, 255), font=section_font)
+        draw.text((px, protocol_box[1] + 42), protocol, fill=(250, 224, 145, 255), font=code_font)
+        draw.text((px, protocol_box[1] + 86), "CODIGO", fill=(226, 190, 100, 255), font=section_font)
+        draw.text((px, protocol_box[1] + 114), auth_code, fill=(212, 180, 248, 255), font=small_font)
 
-        info_panel = (516, 176, width - 78, 822)
-        draw.rounded_rectangle(info_panel, radius=30, fill=(12, 21, 44, 226), outline=(92, 139, 213, 170), width=2)
+        rx0, ry0, rx1, ry1 = right_panel
+        content_pad = 34
+        name_label_y = ry0 + 24
+        draw.text((rx0 + content_pad, name_label_y), "PORTADOR", fill=(226, 190, 100, 255), font=section_font)
+        name_text = self._truncate_text(member.display_name, 34)
+        name_max_width = rx1 - rx0 - (content_pad * 2)
+        name_font = self._fit_text_font(draw, name_text, max_width=name_max_width, preferred_size=46, min_size=34, bold=True)
+        _, name_h = self._text_dimensions(draw, name_text, name_font)
+        name_y = name_label_y + 28
+        draw.text((rx0 + content_pad, name_y), name_text, fill=(252, 241, 214, 255), font=name_font)
 
-        draw.text((552, 224), "PORTADOR", fill=(160, 195, 242, 255), font=section_font)
-        draw.text((552, 256), self._truncate_text(member.display_name, 28), fill=(255, 255, 255, 255), font=hero_font)
+        grid_top = name_y + name_h + 28
+        column_gap = 48
+        column_width = (rx1 - rx0 - (content_pad * 2) - column_gap) // 2
+        left_col_x = rx0 + content_pad
+        right_col_x = left_col_x + column_width + column_gap
+        row_gap = 94
+        field_label_font = section_font
 
-        draw.text((552, 350), "USUARIO DISCORD", fill=(160, 195, 242, 255), font=section_font)
-        draw.text((552, 382), self._truncate_text(str(member), 32), fill=(226, 235, 251, 255), font=value_font)
+        def draw_field(x: int, y: int, label: str, value: str) -> None:
+            draw.text((x, y), label, fill=(218, 183, 96, 255), font=field_label_font)
+            value_font_fit = self._fit_text_font(
+                draw,
+                value,
+                max_width=column_width,
+                preferred_size=30,
+                min_size=22,
+                bold=False,
+            )
+            draw.text((x, y + 30), value, fill=(218, 186, 248, 255), font=value_font_fit)
 
-        draw.text((552, 458), "ID DISCORD", fill=(160, 195, 242, 255), font=section_font)
-        draw.text((552, 490), str(member.id), fill=(245, 247, 255, 255), font=value_font)
+        draw_field(left_col_x, grid_top, "USUARIO DISCORD", self._truncate_text(str(member), 34))
+        draw_field(right_col_x, grid_top, "EMISSAO", issued_label)
+        draw_field(left_col_x, grid_top + row_gap, "ID DISCORD", str(member.id))
+        draw_field(right_col_x, grid_top + row_gap, "INGRESSO NO SERVIDOR", joined_label)
+        draw_field(left_col_x, grid_top + (row_gap * 2), "PROTOCOLO", protocol)
+        draw_field(right_col_x, grid_top + (row_gap * 2), "CODIGO DE AUTENTICACAO", auth_code)
 
-        draw.text((980, 350), "EMISSAO", fill=(160, 195, 242, 255), font=section_font)
-        draw.text((980, 382), issued_label, fill=(226, 235, 251, 255), font=value_font)
+        status_box = (rx0 + content_pad, ry1 - 180, rx1 - content_pad, ry1 - 110)
+        draw.rounded_rectangle(status_box, radius=20, fill=(67, 30, 112, 246), outline=(236, 194, 74, 255), width=3)
+        status_text = "STATUS OPERACIONAL: APROVADO COMO BETA TESTER"
+        status_w, status_h = self._text_dimensions(draw, status_text, status_font)
+        status_x = status_box[0] + ((status_box[2] - status_box[0]) - status_w) // 2
+        status_y = status_box[1] + ((status_box[3] - status_box[1]) - status_h) // 2
+        draw.text((status_x, status_y), status_text, fill=(250, 224, 145, 255), font=status_font)
 
-        draw.text((980, 458), "INGRESSO NO SERVIDOR", fill=(160, 195, 242, 255), font=section_font)
-        draw.text((980, 490), joined_label, fill=(245, 247, 255, 255), font=value_font)
-
-        status_box = (552, 588, width - 120, 674)
-        draw.rounded_rectangle(status_box, radius=20, fill=(27, 87, 56, 242), outline=(147, 232, 181, 255), width=3)
-        draw.text((582, 616), "STATUS OPERACIONAL: APROVADO COMO BETA TESTER", fill=(231, 255, 241, 255), font=status_font)
-
-        security_box = (552, 702, width - 120, 790)
-        draw.rounded_rectangle(security_box, radius=18, fill=(8, 14, 31, 240), outline=(227, 193, 113, 180), width=2)
-        draw.text((582, 726), f"AUTENTICACAO DIGITAL: {auth_code}", fill=(245, 230, 173, 255), font=code_font)
-        draw.text((582, 756), "Documento oficial do Programa Beta Drakoria. Uso interno de validacao.", fill=(174, 206, 250, 255), font=small_font)
+        security_box = (rx0 + content_pad, ry1 - 98, rx1 - content_pad, ry1 - 28)
+        draw.rounded_rectangle(security_box, radius=18, fill=(10, 7, 20, 246), outline=(131, 77, 192, 220), width=2)
+        security_line_1 = f"AUTENTICACAO DIGITAL: {auth_code}"
+        security_line_2 = "Documento oficial do Programa Beta Drakoria. Uso interno de validacao."
+        draw.text((security_box[0] + 20, security_box[1] + 12), security_line_1, fill=(250, 224, 145, 255), font=code_font)
+        draw.text((security_box[0] + 20, security_box[1] + 40), security_line_2, fill=(204, 170, 244, 255), font=small_font)
 
         out = io.BytesIO()
         card.convert("RGB").save(out, format="PNG", optimize=True)
@@ -530,6 +604,34 @@ class BetaProgramService:
         if max_chars <= 3:
             return value[:max_chars]
         return value[: max_chars - 3].rstrip() + "..."
+
+    def _fit_text_font(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        *,
+        max_width: int,
+        preferred_size: int,
+        min_size: int,
+        bold: bool,
+    ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+        size = preferred_size
+        while size >= min_size:
+            font = self._load_font(size, bold=bold)
+            width, _ = self._text_dimensions(draw, text, font)
+            if width <= max_width:
+                return font
+            size -= 1
+        return self._load_font(min_size, bold=bold)
+
+    @staticmethod
+    def _text_dimensions(
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    ) -> tuple[int, int]:
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        return right - left, bottom - top
 
     async def _load_brand_logo_image(self) -> Image.Image | None:
         logo_url = self._brand_logo_url()
