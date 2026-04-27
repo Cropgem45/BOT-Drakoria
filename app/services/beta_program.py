@@ -789,9 +789,14 @@ class BetaProgramService:
             if user_id not in latest_by_user:
                 latest_by_user[user_id] = application
 
+        target_user_ids: set[int] = set(latest_by_user)
+        beta_role = guild.get_role(self.bot.server_map.beta_program_role_id() or 0)
+        if beta_role is not None:
+            target_user_ids.update(member.id for member in beta_role.members if not member.bot)
+
         results: list[dict[str, Any]] = []
-        for application in latest_by_user.values():
-            user_id = int(application["user_id"])
+        for user_id in sorted(target_user_ids):
+            application = latest_by_user.get(user_id)
             member = guild.get_member(user_id)
             if member is None:
                 try:
@@ -800,7 +805,7 @@ class BetaProgramService:
                     results.append(
                         {
                             "user_id": user_id,
-                            "application_id": int(application["id"]),
+                            "application_id": int(application["id"]) if application else None,
                             "status": "member_not_found",
                         }
                     )
@@ -811,7 +816,7 @@ class BetaProgramService:
                     guild,
                     member,
                     actor=actor,
-                    application_id=int(application["id"]),
+                    application_id=int(application["id"]) if application else None,
                 )
                 results.append(
                     {
@@ -826,7 +831,7 @@ class BetaProgramService:
                 results.append(
                     {
                         "user_id": user_id,
-                        "application_id": int(application["id"]),
+                        "application_id": int(application["id"]) if application else None,
                         "status": "error",
                         "error": str(exc)[:300],
                     }
