@@ -74,6 +74,49 @@ class BetaProgramCog(
             ephemeral=True,
         )
 
+    @app_commands.command(
+        name="reemitir_todas_carteirinhas",
+        description="Reenvia as carteirinhas de todos os Beta Testers aprovados",
+    )
+    @app_commands.guild_only()
+    async def reemitir_todas_carteirinhas(self, interaction: discord.Interaction) -> None:
+        if not self.bot.permission_service.has(interaction.user, "manage_beta_program"):
+            raise app_commands.CheckFailure("Sem permissão para reemitir carteirinhas beta.")
+        if not interaction.guild:
+            raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        result = await self.bot.beta_program_service.reissue_all_tester_cards(
+            interaction.guild,
+            actor=interaction.user,
+        )
+        details: list[str] = []
+        for item in result["results"][:10]:
+            if item["status"] == "ok":
+                details.append(
+                    f"<@{item['user_id']}> | BT-{item['application_id']:06d} | "
+                    f"DM: {'ok' if item.get('dm_sent') else 'falhou'} | "
+                    f"Canal: {'ok' if item.get('channel_sent') else 'falhou'}"
+                )
+            elif item["status"] == "member_not_found":
+                details.append(f"<@{item['user_id']}> | BT-{item['application_id']:06d} | membro não encontrado")
+            else:
+                details.append(f"<@{item['user_id']}> | BT-{item['application_id']:06d} | erro: {item.get('error', '-')}")
+
+        description = (
+            f"Processadas: **{result['total']}**\n"
+            f"Sucesso: **{result['success_count']}**\n"
+            f"Falhas: **{result['fail_count']}**"
+        )
+        if details:
+            description += "\n\n" + "\n".join(details)
+            if result["total"] > len(details):
+                description += f"\n... e mais {result['total'] - len(details)} registro(s)."
+
+        await interaction.followup.send(
+            embed=self.bot.embeds.success("Reemissão em Lote Concluída", description),
+            ephemeral=True,
+        )
+
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         if interaction.response.is_done():
             await interaction.followup.send(

@@ -247,51 +247,34 @@ class BetaProgramService:
                 await member.add_roles(beta_role, reason=f"Aprovado no Programa Beta por {interaction.user}")
                 role_applied = True
 
-            card_payload: bytes | None = None
-            card_filename: str = f"drakoria-beta-card-{member.id}.png"
             card_generated = False
-            if self.bot.server_map.beta_program_generate_tester_card():
-                card_payload, card_filename = await self.generate_tester_card(member, application_id)
-                card_generated = True
+            card_data = self._build_tester_card_data(member, application_id)
+            card_embed = self.build_tester_card_embed(member, card_data)
+            card_generated = True
 
             card_sent_dm = False
             dm_status = "não_tentado"
             if self.bot.server_map.beta_program_send_dm_on_approval():
-                dm_embed = self.bot.embeds.success(
-                    "Você foi aprovado no Programa de Beta Testers",
-                    (
-                        "Sua candidatura ao Programa de Beta Testers do Drakoria foi aprovada.\n\n"
-                        "Agora você integra oficialmente o grupo de testers e poderá contribuir com validações, "
-                        "reportes e evolução técnica do servidor."
-                    ),
-                )
                 try:
-                    files = [discord.File(io.BytesIO(card_payload), filename=card_filename)] if card_payload else []
-                    await member.send(embed=dm_embed, files=files)
-                    card_sent_dm = card_payload is not None
+                    await member.send(embed=card_embed)
+                    card_sent_dm = True
                     dm_status = "enviado"
                 except discord.HTTPException:
                     dm_status = "falhou"
 
             card_sent_channel = False
-            if card_payload is not None:
-                card_channel_id = self.bot.server_map.beta_program_card_channel_id()
-                card_channel = interaction.guild.get_channel(card_channel_id) if card_channel_id else None
-                if isinstance(card_channel, discord.TextChannel):
-                    channel_embed = self.bot.embeds.make(
-                        title="Carteirinha Oficial Emitida",
-                        description=f"{member.mention} foi aprovado no Programa de Beta Testers.",
-                        fields=[
-                            ("Candidatura", f"indisponível", True),
-                            ("Aprovado por", interaction.user.mention, True),
-                            ("Data", self._now_human(), False),
-                        ],
-                    )
-                    await card_channel.send(
-                        embed=channel_embed,
-                        file=discord.File(io.BytesIO(card_payload), filename=card_filename),
-                    )
-                    card_sent_channel = True
+            card_channel_id = self.bot.server_map.beta_program_card_channel_id()
+            card_channel = interaction.guild.get_channel(card_channel_id) if card_channel_id else None
+            if isinstance(card_channel, discord.TextChannel):
+                channel_embed = self.build_tester_card_embed(
+                    member,
+                    card_data,
+                    title="Carta Oficial de Beta Tester",
+                    description=f"{member.mention} foi aprovado no Programa de Beta Testers.",
+                    actor_label=interaction.user.mention,
+                )
+                await card_channel.send(embed=channel_embed)
+                card_sent_channel = True
 
             await self.bot.db.update_beta_tester_application(
                 application_id,
@@ -683,24 +666,18 @@ class BetaProgramService:
             raise RuntimeError("A carteirinha só pode ser reemitida para candidaturas já aprovadas.")
 
         resolved_application_id = int(application["id"])
-        card_payload, card_filename = await self.generate_tester_card(
+        card_data = self._build_tester_card_data(
             member,
             resolved_application_id,
             issued_label=issued_label,
             joined_label=joined_label,
             auth_code=auth_code,
         )
+        card_embed = self.build_tester_card_embed(member, card_data)
 
         dm_sent = False
         try:
-            dm_embed = self.bot.embeds.success(
-                "Carteirinha Beta Reemitida",
-                "Sua carteirinha oficial de Beta Tester do Drakoria foi reemitida com o layout atualizado.",
-            )
-            await member.send(
-                embed=dm_embed,
-                file=discord.File(io.BytesIO(card_payload), filename=card_filename),
-            )
+            await member.send(embed=card_embed)
             dm_sent = True
         except discord.HTTPException:
             dm_sent = False
@@ -709,19 +686,14 @@ class BetaProgramService:
         card_channel_id = self.bot.server_map.beta_program_card_channel_id()
         card_channel = guild.get_channel(card_channel_id) if card_channel_id else None
         if isinstance(card_channel, discord.TextChannel):
-            channel_embed = self.bot.embeds.make(
-                title="Carteirinha Oficial Reemitida",
+            channel_embed = self.build_tester_card_embed(
+                member,
+                card_data,
+                title="Carta Oficial de Beta Tester",
                 description=f"{member.mention} recebeu a carteirinha Beta Tester atualizada.",
-                fields=[
-                    ("Protocolo", f"`BT-{resolved_application_id:06d}`", True),
-                    ("Reemitida por", actor.mention if actor else "sistema", True),
-                    ("Data", self._now_human(), False),
-                ],
+                actor_label=actor.mention if actor else "sistema",
             )
-            await card_channel.send(
-                embed=channel_embed,
-                file=discord.File(io.BytesIO(card_payload), filename=card_filename),
-            )
+            await card_channel.send(embed=channel_embed)
             channel_sent = True
 
         await self.bot.db.update_beta_tester_application(
@@ -738,6 +710,135 @@ class BetaProgramService:
             "dm_sent": dm_sent,
             "channel_sent": channel_sent,
             "channel_id": card_channel_id,
+        }
+
+    def _build_tester_card_data(
+        self,
+        member: discord.Member,
+        application_id: int,
+        *,
+        issued_label: str | None = None,
+        joined_label: str | None = None,
+        auth_code: str | None = None,
+    ) -> TesterCardData:
+        return TesterCardData(
+            holder_name=member.display_name,
+            discord_user=str(member),
+            discord_id=member.id,
+            protocol=f"BT-{application_id:06d}",
+            issued_label=issued_label or datetime.now(UTC).strftime("%d/%m/%Y %H:%M UTC"),
+            joined_label=joined_label
+            or (
+                member.joined_at.astimezone(UTC).strftime("%d/%m/%Y")
+                if member.joined_at is not None
+                else "-"
+            ),
+            auth_code=auth_code or self._card_auth_code(member.id, application_id),
+        )
+
+    def build_tester_card_embed(
+        self,
+        member: discord.Member,
+        data: TesterCardData,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        actor_label: str | None = None,
+    ) -> discord.Embed:
+        lines = [
+            "Registro oficial de identidade do Programa Beta de Drakoria.",
+            "",
+            f"**Portador:** {member.mention}",
+            f"**Usuario Discord:** `{data.discord_user}`",
+            f"**Status:** **{data.status}**",
+        ]
+        embed = self.bot.embeds.make(
+            title=title or "Carta Oficial de Beta Tester",
+            description=description or "\n".join(lines),
+            color=self.bot.embeds.success_color,
+            fields=[
+                ("Protocolo", f"`{data.protocol}`", True),
+                ("Emissao", f"`{data.issued_label}`", True),
+                ("Ingresso", f"`{data.joined_label}`", True),
+                ("Codigo de Autenticacao", f"`{data.auth_code}`", False),
+                ("Identificacao", f"`{data.discord_id}`", True),
+                ("Perfil", member.mention, True),
+                ("Condicao Operacional", "Aprovado como Beta Tester", False),
+            ],
+            thumbnail_url=member.display_avatar.url,
+            author_name="Drakoria | Programa Beta",
+            author_icon_url=self.bot.embeds.footer_icon or self.bot.embeds.guild_icon_url,
+            footer_text="Documento oficial do Programa Beta Drakoria",
+            footer_icon_url=self.bot.embeds.footer_icon or self.bot.embeds.guild_icon_url,
+            timestamp=True,
+        )
+        if actor_label:
+            embed.add_field(name="Lavrado por", value=actor_label, inline=True)
+        return embed
+
+    async def reissue_all_tester_cards(
+        self,
+        guild: discord.Guild,
+        *,
+        actor: discord.Member | discord.User | None = None,
+    ) -> dict[str, Any]:
+        approved = await self.bot.db.list_beta_tester_applications(guild.id, status="approved", limit=500)
+        latest_by_user: dict[int, dict[str, Any]] = {}
+        for application in approved:
+            user_id = int(application["user_id"])
+            if user_id not in latest_by_user:
+                latest_by_user[user_id] = application
+
+        results: list[dict[str, Any]] = []
+        for application in latest_by_user.values():
+            user_id = int(application["user_id"])
+            member = guild.get_member(user_id)
+            if member is None:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except discord.HTTPException:
+                    results.append(
+                        {
+                            "user_id": user_id,
+                            "application_id": int(application["id"]),
+                            "status": "member_not_found",
+                        }
+                    )
+                    continue
+
+            try:
+                result = await self.reissue_tester_card(
+                    guild,
+                    member,
+                    actor=actor,
+                    application_id=int(application["id"]),
+                )
+                results.append(
+                    {
+                        "user_id": user_id,
+                        "application_id": result["application_id"],
+                        "status": "ok",
+                        "dm_sent": result["dm_sent"],
+                        "channel_sent": result["channel_sent"],
+                    }
+                )
+            except Exception as exc:
+                results.append(
+                    {
+                        "user_id": user_id,
+                        "application_id": int(application["id"]),
+                        "status": "error",
+                        "error": str(exc)[:300],
+                    }
+                )
+
+        success_count = sum(1 for item in results if item["status"] == "ok")
+        fail_count = len(results) - success_count
+        return {
+            "total": len(results),
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "results": results,
         }
 
     @staticmethod
