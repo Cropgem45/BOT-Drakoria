@@ -467,8 +467,8 @@ class BetaProgramService:
         draw.rounded_rectangle(left_panel, radius=30, fill=(19, 11, 36, 244), outline=(236, 194, 74, 220), width=3)
         draw.rounded_rectangle(right_panel, radius=30, fill=(15, 10, 30, 238), outline=(131, 77, 192, 210), width=2)
 
-        label_font = self._load_font(27, bold=True)
-        footer_font = self._load_font(20, bold=False)
+        label_font = self._load_font(30, bold=True)
+        footer_font = self._load_font(22, bold=False)
 
         logo = await self._load_brand_logo_image()
         emblem_frame: tuple[int, int, int, int] | None = None
@@ -509,8 +509,8 @@ class BetaProgramService:
         title_left = header[0] + 26
         title_right = (emblem_frame[0] - 24) if emblem_frame else (header[2] - 26)
         title_max_width = max(220, title_right - title_left)
-        title_font = self._fit_text_font(draw, title, max_width=title_max_width, preferred_size=58, min_size=44, bold=True)
-        subtitle_font = self._fit_text_font(draw, subtitle, max_width=title_max_width, preferred_size=30, min_size=24, bold=False)
+        title_font = self._fit_text_font(draw, title, max_width=title_max_width, preferred_size=66, min_size=50, bold=True)
+        subtitle_font = self._fit_text_font(draw, subtitle, max_width=title_max_width, preferred_size=34, min_size=26, bold=False)
         title_h = self._text_dimensions(draw, title, title_font)[1]
         subtitle_h = self._text_dimensions(draw, subtitle, subtitle_font)[1]
         title_y = header[1] + 22
@@ -525,8 +525,8 @@ class BetaProgramService:
             draw,
             left_title,
             max_width=(left_panel[2] - left_panel[0] - 36),
-            preferred_size=28,
-            min_size=22,
+            preferred_size=32,
+            min_size=24,
             bold=True,
         )
         left_title_w, left_title_h = self._text_dimensions(draw, left_title, left_title_font)
@@ -534,7 +534,7 @@ class BetaProgramService:
         left_title_y = left_panel[1] + 24
         draw.text((left_title_x, left_title_y), left_title, fill=(228, 194, 108, 255), font=left_title_font)
 
-        avatar_size = 238
+        avatar_size = 220
         avatar_x = left_panel[0] + (left_panel[2] - left_panel[0] - avatar_size) // 2
         protocol_box = (left_panel[0] + 24, left_panel[3] - 230, left_panel[2] - 24, left_panel[3] - 24)
         avatar_area_top = left_title_y + left_title_h + 22
@@ -564,25 +564,25 @@ class BetaProgramService:
         px = protocol_box[0] + 18
         box_width = protocol_box[2] - protocol_box[0] - 36
         draw.text((px, protocol_box[1] + 18), "PROTOCOLO", fill=(226, 190, 100, 255), font=label_font)
-        protocol_font = self._fit_text_font(draw, data.protocol, max_width=box_width, preferred_size=38, min_size=30, bold=True)
+        protocol_font = self._fit_text_font(draw, data.protocol, max_width=box_width, preferred_size=44, min_size=34, bold=True)
         draw.text((px, protocol_box[1] + 58), data.protocol, fill=(250, 224, 145, 255), font=protocol_font)
         draw.text((px, protocol_box[1] + 116), "CÓDIGO", fill=(226, 190, 100, 255), font=label_font)
-        side_code_font = self._fit_text_font(draw, data.auth_code, max_width=box_width, preferred_size=28, min_size=22, bold=True)
+        side_code_font = self._fit_text_font(draw, data.auth_code, max_width=box_width, preferred_size=32, min_size=24, bold=True)
         draw.text((px, protocol_box[1] + 154), data.auth_code, fill=(212, 180, 248, 255), font=side_code_font)
 
         rx0, ry0, rx1, ry1 = right_panel
-        content_pad = 38
+        content_pad = 30
         name_label_y = ry0 + 24
         draw.text((rx0 + content_pad, name_label_y), "PORTADOR", fill=(226, 190, 100, 255), font=label_font)
         name_text = self._truncate_text(data.holder_name, 34)
         name_max_width = rx1 - rx0 - (content_pad * 2)
-        name_font = self._fit_text_font(draw, name_text, max_width=name_max_width, preferred_size=58, min_size=42, bold=True)
+        name_font = self._fit_text_font(draw, name_text, max_width=name_max_width, preferred_size=66, min_size=48, bold=True)
         _, name_h = self._text_dimensions(draw, name_text, name_font)
         name_y = name_label_y + 38
         draw.text((rx0 + content_pad, name_y), name_text, fill=(252, 241, 214, 255), font=name_font)
 
         grid_top = name_y + name_h + 28
-        column_gap = 54
+        column_gap = 28
         column_width = (rx1 - rx0 - (content_pad * 2) - column_gap) // 2
         left_col_x = rx0 + content_pad
         right_col_x = left_col_x + column_width + column_gap
@@ -594,41 +594,43 @@ class BetaProgramService:
                 draw,
                 value,
                 max_width=column_width,
-                preferred_size=34,
-                min_size=26,
+                preferred_size=40,
+                min_size=30,
                 bold=True,
             )
             draw.text((x, y + 40), value, fill=(230, 208, 255, 255), font=value_font_fit)
 
-        draw_field(left_col_x, grid_top, "USUÁRIO DISCORD", self._truncate_text(data.discord_user, 34))
+        draw_field(left_col_x, grid_top, "USUÁRIO", self._truncate_text(data.discord_user, 24))
         draw_field(right_col_x, grid_top, "EMISSÃO", data.issued_label)
-        draw_field(left_col_x, grid_top + row_gap, "ID DISCORD", str(data.discord_id))
+        draw_field(left_col_x, grid_top + row_gap, "ID", str(data.discord_id))
         draw_field(right_col_x, grid_top + row_gap, "INGRESSO NO SERVIDOR", data.joined_label)
         draw_field(left_col_x, grid_top + (row_gap * 2), "PROTOCOLO", data.protocol)
-        draw_field(right_col_x, grid_top + (row_gap * 2), "CÓDIGO DE AUTENTICAÇÃO", data.auth_code)
+        draw_field(right_col_x, grid_top + (row_gap * 2), "CÓDIGO", data.auth_code)
 
         status_box = (rx0 + content_pad, ry1 - 158, rx1 - content_pad, ry1 - 88)
         draw.rounded_rectangle(status_box, radius=20, fill=(67, 30, 112, 246), outline=(236, 194, 74, 255), width=3)
-        status_text = f"STATUS OPERACIONAL: {data.status}"
+        status_label = "STATUS"
+        status_text = data.status
+        draw.text((status_box[0] + 24, status_box[1] + 10), status_label, fill=(250, 224, 145, 255), font=label_font)
         status_font_fit = self._fit_text_font(
             draw,
             status_text,
-            max_width=status_box[2] - status_box[0] - 42,
-            preferred_size=36,
-            min_size=28,
+            max_width=status_box[2] - status_box[0] - 48,
+            preferred_size=42,
+            min_size=32,
             bold=True,
         )
         status_w, status_h = self._text_dimensions(draw, status_text, status_font_fit)
         status_x = status_box[0] + ((status_box[2] - status_box[0]) - status_w) // 2
-        status_y = status_box[1] + ((status_box[3] - status_box[1]) - status_h) // 2
+        status_y = status_box[1] + 36
         draw.text((status_x, status_y), status_text, fill=(250, 224, 145, 255), font=status_font_fit)
 
         security_box = (rx0 + content_pad, ry1 - 78, rx1 - content_pad, ry1 - 12)
         draw.rounded_rectangle(security_box, radius=18, fill=(10, 7, 20, 246), outline=(131, 77, 192, 220), width=2)
-        security_line_1 = f"AUTENTICAÇÃO DIGITAL: {data.auth_code}"
+        security_line_1 = f"AUTENTICAÇÃO: {data.auth_code}"
         security_line_2 = "Documento oficial do Programa Beta Drakoria. Uso interno de validação."
         security_width = security_box[2] - security_box[0] - 40
-        security_font = self._fit_text_font(draw, security_line_1, max_width=security_width, preferred_size=30, min_size=24, bold=True)
+        security_font = self._fit_text_font(draw, security_line_1, max_width=security_width, preferred_size=34, min_size=26, bold=True)
         draw.text((security_box[0] + 20, security_box[1] + 6), security_line_1, fill=(250, 224, 145, 255), font=security_font)
         draw.text((security_box[0] + 20, security_box[1] + 38), security_line_2, fill=(204, 170, 244, 255), font=footer_font)
 
