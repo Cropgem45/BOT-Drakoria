@@ -654,7 +654,34 @@ class BetaProgramService:
             else await self.bot.db.get_latest_beta_tester_application(guild.id, member.id)
         )
         if not application:
-            raise RuntimeError("Nenhuma candidatura beta foi encontrada para esse usuário.")
+            beta_role_id = self.bot.server_map.beta_program_role_id()
+            beta_role = guild.get_role(beta_role_id or 0)
+            if beta_role is None or beta_role not in member.roles:
+                raise RuntimeError(
+                    "Nenhuma candidatura beta foi encontrada para esse usuário, e ele não possui o cargo Beta Tester."
+                )
+            application_id = await self.bot.db.create_beta_tester_application(
+                guild.id,
+                member.id,
+                panel_channel_id=None,
+                panel_message_id=None,
+                status="approved",
+            )
+            await self.bot.db.update_beta_tester_application(
+                application_id,
+                {
+                    "submitted_at": datetime.now(UTC).isoformat(),
+                    "reviewed_at": datetime.now(UTC).isoformat(),
+                    "reviewed_by_id": actor.id if actor else None,
+                    "review_result": "approved",
+                    "role_applied": 1,
+                    "last_step": "manual_reissue_bootstrap",
+                    "last_error": None,
+                },
+            )
+            application = await self.bot.db.get_beta_tester_application(application_id)
+            if not application:
+                raise RuntimeError("Não foi possível criar o registro histórico da candidatura beta.")
         if int(application["guild_id"]) != guild.id or int(application["user_id"]) != member.id:
             raise RuntimeError("A candidatura encontrada não pertence a esse usuário neste servidor.")
         if str(application.get("status")) != "approved":
