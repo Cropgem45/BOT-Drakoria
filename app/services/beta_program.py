@@ -21,6 +21,18 @@ class BetaStartResult:
     detail: str
 
 
+@dataclass(slots=True)
+class TesterCardData:
+    holder_name: str
+    discord_user: str
+    discord_id: int
+    protocol: str
+    issued_label: str
+    joined_label: str
+    auth_code: str
+    status: str = "APROVADO COMO BETA TESTER"
+
+
 class BetaProgramService:
     def __init__(self, bot: Any) -> None:
         self.bot = bot
@@ -387,17 +399,41 @@ class BetaProgramService:
         view = self.bot.view_factory.build_beta_application_review_view(application_id) if application.get("status") == "pending" else None
         await message.edit(embed=embed, view=view)
 
-    async def generate_tester_card(self, member: discord.Member, application_id: int) -> tuple[bytes, str]:
-        width, height = 1500, 900
-        issued_at = datetime.now(UTC)
-        issued_label = issued_at.strftime("%d/%m/%Y %H:%M UTC")
-        joined_label = (
-            member.joined_at.astimezone(UTC).strftime("%d/%m/%Y")
-            if member.joined_at is not None
-            else "-"
-        )
+    async def generate_tester_card(
+        self,
+        member: discord.Member,
+        application_id: int,
+        *,
+        issued_label: str | None = None,
+        joined_label: str | None = None,
+        auth_code: str | None = None,
+    ) -> tuple[bytes, str]:
         protocol = f"BT-{application_id:06d}"
-        auth_code = self._card_auth_code(member.id, application_id)
+        data = TesterCardData(
+            holder_name=member.display_name,
+            discord_user=str(member),
+            discord_id=member.id,
+            protocol=protocol,
+            issued_label=issued_label or datetime.now(UTC).strftime("%d/%m/%Y %H:%M UTC"),
+            joined_label=joined_label
+            or (
+                member.joined_at.astimezone(UTC).strftime("%d/%m/%Y")
+                if member.joined_at is not None
+                else "-"
+            ),
+            auth_code=auth_code or self._card_auth_code(member.id, application_id),
+        )
+        card_payload = await self.render_tester_card(data, avatar_asset=member.display_avatar.replace(format="png", size=512))
+        return card_payload, f"drakoria-beta-card-{member.id}.png"
+
+    async def render_tester_card(
+        self,
+        data: TesterCardData,
+        *,
+        avatar_asset: discord.Asset | None = None,
+        avatar_bytes: bytes | None = None,
+    ) -> bytes:
+        width, height = 1600, 900
 
         card = Image.new("RGBA", (width, height), (7, 6, 14, 255))
         draw = ImageDraw.Draw(card)
@@ -420,10 +456,10 @@ class BetaProgramService:
 
         outer = (22, 22, width - 22, height - 22)
         inner = (44, 44, width - 44, height - 44)
-        header = (70, 70, width - 70, 198)
-        content_top = header[3] + 18
-        left_panel = (84, content_top, 484, 822)
-        right_panel = (504, content_top, width - 84, 822)
+        header = (70, 66, width - 70, 206)
+        content_top = header[3] + 22
+        left_panel = (84, content_top, 514, 822)
+        right_panel = (536, content_top, width - 84, 822)
 
         draw.rounded_rectangle(outer, radius=36, fill=(10, 8, 18, 228), outline=(236, 194, 74, 255), width=4)
         draw.rounded_rectangle(inner, radius=30, outline=(131, 77, 192, 185), width=2)
@@ -431,22 +467,20 @@ class BetaProgramService:
         draw.rounded_rectangle(left_panel, radius=30, fill=(19, 11, 36, 244), outline=(236, 194, 74, 220), width=3)
         draw.rounded_rectangle(right_panel, radius=30, fill=(15, 10, 30, 238), outline=(131, 77, 192, 210), width=2)
 
-        section_font = self._load_font(20, bold=False)
-        small_font = self._load_font(19, bold=False)
-        code_font = self._load_font(22, bold=True)
-        status_font = self._load_font(31, bold=True)
+        label_font = self._load_font(27, bold=True)
+        footer_font = self._load_font(20, bold=False)
 
         logo = await self._load_brand_logo_image()
         emblem_frame: tuple[int, int, int, int] | None = None
         if logo is not None:
-            watermark_size = 300
+            watermark_size = 360
             watermark = ImageOps.fit(logo, (watermark_size, watermark_size), method=Image.Resampling.LANCZOS)
-            watermark.putalpha(28)
-            watermark_x = right_panel[2] - watermark_size - 52
-            watermark_y = right_panel[1] + 110
+            watermark.putalpha(30)
+            watermark_x = right_panel[2] - watermark_size - 54
+            watermark_y = right_panel[1] + 88
             card.paste(watermark, (watermark_x, watermark_y), watermark)
 
-            emblem_size = 100
+            emblem_size = 108
             emblem = ImageOps.fit(logo, (emblem_size, emblem_size), method=Image.Resampling.LANCZOS)
             emblem_frame_size = emblem_size + 24
             emblem_margin_right = 26
@@ -471,16 +505,16 @@ class BetaProgramService:
             card.paste(emblem, (emblem_x, emblem_y), emblem)
 
         title = "CARTEIRINHA OFICIAL BETA TESTER"
-        subtitle = "Drakoria | Nexar | Programa de Validacao Tecnica"
+        subtitle = "Drakoria | Nexar | Programa de Validação Técnica"
         title_left = header[0] + 26
         title_right = (emblem_frame[0] - 24) if emblem_frame else (header[2] - 26)
         title_max_width = max(220, title_right - title_left)
-        title_font = self._fit_text_font(draw, title, max_width=title_max_width, preferred_size=48, min_size=36, bold=True)
-        subtitle_font = self._fit_text_font(draw, subtitle, max_width=title_max_width, preferred_size=24, min_size=18, bold=False)
+        title_font = self._fit_text_font(draw, title, max_width=title_max_width, preferred_size=58, min_size=44, bold=True)
+        subtitle_font = self._fit_text_font(draw, subtitle, max_width=title_max_width, preferred_size=30, min_size=24, bold=False)
         title_h = self._text_dimensions(draw, title, title_font)[1]
         subtitle_h = self._text_dimensions(draw, subtitle, subtitle_font)[1]
-        title_y = header[1] + 20
-        subtitle_y = title_y + title_h + 20
+        title_y = header[1] + 22
+        subtitle_y = title_y + title_h + 18
         draw.text((title_left, title_y), title, fill=(250, 224, 145, 255), font=title_font)
         draw.text((title_left, subtitle_y), subtitle, fill=(194, 154, 245, 255), font=subtitle_font)
         line_y = subtitle_y + subtitle_h + 14
@@ -491,29 +525,30 @@ class BetaProgramService:
             draw,
             left_title,
             max_width=(left_panel[2] - left_panel[0] - 36),
-            preferred_size=20,
-            min_size=16,
-            bold=False,
+            preferred_size=28,
+            min_size=22,
+            bold=True,
         )
         left_title_w, left_title_h = self._text_dimensions(draw, left_title, left_title_font)
         left_title_x = left_panel[0] + ((left_panel[2] - left_panel[0]) - left_title_w) // 2
         left_title_y = left_panel[1] + 24
         draw.text((left_title_x, left_title_y), left_title, fill=(228, 194, 108, 255), font=left_title_font)
 
-        avatar_size = 252
+        avatar_size = 238
         avatar_x = left_panel[0] + (left_panel[2] - left_panel[0] - avatar_size) // 2
-        protocol_box = (left_panel[0] + 24, left_panel[3] - 212, left_panel[2] - 24, left_panel[3] - 24)
+        protocol_box = (left_panel[0] + 24, left_panel[3] - 230, left_panel[2] - 24, left_panel[3] - 24)
         avatar_area_top = left_title_y + left_title_h + 22
         avatar_area_bottom = protocol_box[1] - 20
         avatar_y = avatar_area_top + max(0, (avatar_area_bottom - avatar_area_top - avatar_size) // 2)
         draw.ellipse((avatar_x - 12, avatar_y - 12, avatar_x + avatar_size + 12, avatar_y + avatar_size + 12), fill=(11, 8, 22, 236))
         draw.ellipse((avatar_x - 14, avatar_y - 14, avatar_x + avatar_size + 14, avatar_y + avatar_size + 14), outline=(236, 194, 74, 245), width=4)
 
-        avatar_asset = member.display_avatar.replace(format="png", size=512)
         avatar = Image.new("RGBA", (avatar_size, avatar_size), (48, 66, 104, 255))
         try:
-            avatar_bytes = await avatar_asset.read()
-            avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+            if avatar_bytes is None and avatar_asset is not None:
+                avatar_bytes = await avatar_asset.read()
+            if avatar_bytes is not None:
+                avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
             avatar = ImageOps.fit(avatar, (avatar_size, avatar_size), method=Image.Resampling.LANCZOS)
         except Exception:
             pass
@@ -527,68 +562,161 @@ class BetaProgramService:
 
         draw.rounded_rectangle(protocol_box, radius=18, fill=(12, 8, 24, 242), outline=(131, 77, 192, 205), width=2)
         px = protocol_box[0] + 18
-        draw.text((px, protocol_box[1] + 14), "PROTOCOLO", fill=(226, 190, 100, 255), font=section_font)
-        draw.text((px, protocol_box[1] + 42), protocol, fill=(250, 224, 145, 255), font=code_font)
-        draw.text((px, protocol_box[1] + 86), "CODIGO", fill=(226, 190, 100, 255), font=section_font)
-        draw.text((px, protocol_box[1] + 114), auth_code, fill=(212, 180, 248, 255), font=small_font)
+        box_width = protocol_box[2] - protocol_box[0] - 36
+        draw.text((px, protocol_box[1] + 18), "PROTOCOLO", fill=(226, 190, 100, 255), font=label_font)
+        protocol_font = self._fit_text_font(draw, data.protocol, max_width=box_width, preferred_size=38, min_size=30, bold=True)
+        draw.text((px, protocol_box[1] + 58), data.protocol, fill=(250, 224, 145, 255), font=protocol_font)
+        draw.text((px, protocol_box[1] + 116), "CÓDIGO", fill=(226, 190, 100, 255), font=label_font)
+        side_code_font = self._fit_text_font(draw, data.auth_code, max_width=box_width, preferred_size=28, min_size=22, bold=True)
+        draw.text((px, protocol_box[1] + 154), data.auth_code, fill=(212, 180, 248, 255), font=side_code_font)
 
         rx0, ry0, rx1, ry1 = right_panel
-        content_pad = 34
+        content_pad = 38
         name_label_y = ry0 + 24
-        draw.text((rx0 + content_pad, name_label_y), "PORTADOR", fill=(226, 190, 100, 255), font=section_font)
-        name_text = self._truncate_text(member.display_name, 34)
+        draw.text((rx0 + content_pad, name_label_y), "PORTADOR", fill=(226, 190, 100, 255), font=label_font)
+        name_text = self._truncate_text(data.holder_name, 34)
         name_max_width = rx1 - rx0 - (content_pad * 2)
-        name_font = self._fit_text_font(draw, name_text, max_width=name_max_width, preferred_size=46, min_size=34, bold=True)
+        name_font = self._fit_text_font(draw, name_text, max_width=name_max_width, preferred_size=58, min_size=42, bold=True)
         _, name_h = self._text_dimensions(draw, name_text, name_font)
-        name_y = name_label_y + 28
+        name_y = name_label_y + 38
         draw.text((rx0 + content_pad, name_y), name_text, fill=(252, 241, 214, 255), font=name_font)
 
         grid_top = name_y + name_h + 28
-        column_gap = 48
+        column_gap = 54
         column_width = (rx1 - rx0 - (content_pad * 2) - column_gap) // 2
         left_col_x = rx0 + content_pad
         right_col_x = left_col_x + column_width + column_gap
-        row_gap = 94
-        field_label_font = section_font
+        row_gap = 100
 
         def draw_field(x: int, y: int, label: str, value: str) -> None:
-            draw.text((x, y), label, fill=(218, 183, 96, 255), font=field_label_font)
+            draw.text((x, y), label, fill=(218, 183, 96, 255), font=label_font)
             value_font_fit = self._fit_text_font(
                 draw,
                 value,
                 max_width=column_width,
-                preferred_size=30,
-                min_size=22,
-                bold=False,
+                preferred_size=34,
+                min_size=26,
+                bold=True,
             )
-            draw.text((x, y + 30), value, fill=(218, 186, 248, 255), font=value_font_fit)
+            draw.text((x, y + 40), value, fill=(230, 208, 255, 255), font=value_font_fit)
 
-        draw_field(left_col_x, grid_top, "USUARIO DISCORD", self._truncate_text(str(member), 34))
-        draw_field(right_col_x, grid_top, "EMISSAO", issued_label)
-        draw_field(left_col_x, grid_top + row_gap, "ID DISCORD", str(member.id))
-        draw_field(right_col_x, grid_top + row_gap, "INGRESSO NO SERVIDOR", joined_label)
-        draw_field(left_col_x, grid_top + (row_gap * 2), "PROTOCOLO", protocol)
-        draw_field(right_col_x, grid_top + (row_gap * 2), "CODIGO DE AUTENTICACAO", auth_code)
+        draw_field(left_col_x, grid_top, "USUÁRIO DISCORD", self._truncate_text(data.discord_user, 34))
+        draw_field(right_col_x, grid_top, "EMISSÃO", data.issued_label)
+        draw_field(left_col_x, grid_top + row_gap, "ID DISCORD", str(data.discord_id))
+        draw_field(right_col_x, grid_top + row_gap, "INGRESSO NO SERVIDOR", data.joined_label)
+        draw_field(left_col_x, grid_top + (row_gap * 2), "PROTOCOLO", data.protocol)
+        draw_field(right_col_x, grid_top + (row_gap * 2), "CÓDIGO DE AUTENTICAÇÃO", data.auth_code)
 
-        status_box = (rx0 + content_pad, ry1 - 180, rx1 - content_pad, ry1 - 110)
+        status_box = (rx0 + content_pad, ry1 - 158, rx1 - content_pad, ry1 - 88)
         draw.rounded_rectangle(status_box, radius=20, fill=(67, 30, 112, 246), outline=(236, 194, 74, 255), width=3)
-        status_text = "STATUS OPERACIONAL: APROVADO COMO BETA TESTER"
-        status_w, status_h = self._text_dimensions(draw, status_text, status_font)
+        status_text = f"STATUS OPERACIONAL: {data.status}"
+        status_font_fit = self._fit_text_font(
+            draw,
+            status_text,
+            max_width=status_box[2] - status_box[0] - 42,
+            preferred_size=36,
+            min_size=28,
+            bold=True,
+        )
+        status_w, status_h = self._text_dimensions(draw, status_text, status_font_fit)
         status_x = status_box[0] + ((status_box[2] - status_box[0]) - status_w) // 2
         status_y = status_box[1] + ((status_box[3] - status_box[1]) - status_h) // 2
-        draw.text((status_x, status_y), status_text, fill=(250, 224, 145, 255), font=status_font)
+        draw.text((status_x, status_y), status_text, fill=(250, 224, 145, 255), font=status_font_fit)
 
-        security_box = (rx0 + content_pad, ry1 - 98, rx1 - content_pad, ry1 - 28)
+        security_box = (rx0 + content_pad, ry1 - 78, rx1 - content_pad, ry1 - 12)
         draw.rounded_rectangle(security_box, radius=18, fill=(10, 7, 20, 246), outline=(131, 77, 192, 220), width=2)
-        security_line_1 = f"AUTENTICACAO DIGITAL: {auth_code}"
-        security_line_2 = "Documento oficial do Programa Beta Drakoria. Uso interno de validacao."
-        draw.text((security_box[0] + 20, security_box[1] + 12), security_line_1, fill=(250, 224, 145, 255), font=code_font)
-        draw.text((security_box[0] + 20, security_box[1] + 40), security_line_2, fill=(204, 170, 244, 255), font=small_font)
+        security_line_1 = f"AUTENTICAÇÃO DIGITAL: {data.auth_code}"
+        security_line_2 = "Documento oficial do Programa Beta Drakoria. Uso interno de validação."
+        security_width = security_box[2] - security_box[0] - 40
+        security_font = self._fit_text_font(draw, security_line_1, max_width=security_width, preferred_size=30, min_size=24, bold=True)
+        draw.text((security_box[0] + 20, security_box[1] + 6), security_line_1, fill=(250, 224, 145, 255), font=security_font)
+        draw.text((security_box[0] + 20, security_box[1] + 38), security_line_2, fill=(204, 170, 244, 255), font=footer_font)
 
         out = io.BytesIO()
         card.convert("RGB").save(out, format="PNG", optimize=True)
         out.seek(0)
-        return out.getvalue(), f"drakoria-beta-card-{member.id}.png"
+        return out.getvalue()
+
+    async def reissue_tester_card(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        *,
+        actor: discord.Member | discord.User | None = None,
+        application_id: int | None = None,
+        issued_label: str | None = None,
+        joined_label: str | None = None,
+        auth_code: str | None = None,
+    ) -> dict[str, Any]:
+        application = (
+            await self.bot.db.get_beta_tester_application(application_id)
+            if application_id is not None
+            else await self.bot.db.get_latest_beta_tester_application(guild.id, member.id)
+        )
+        if not application:
+            raise RuntimeError("Nenhuma candidatura beta foi encontrada para esse usuário.")
+        if int(application["guild_id"]) != guild.id or int(application["user_id"]) != member.id:
+            raise RuntimeError("A candidatura encontrada não pertence a esse usuário neste servidor.")
+        if str(application.get("status")) != "approved":
+            raise RuntimeError("A carteirinha só pode ser reemitida para candidaturas já aprovadas.")
+
+        resolved_application_id = int(application["id"])
+        card_payload, card_filename = await self.generate_tester_card(
+            member,
+            resolved_application_id,
+            issued_label=issued_label,
+            joined_label=joined_label,
+            auth_code=auth_code,
+        )
+
+        dm_sent = False
+        try:
+            dm_embed = self.bot.embeds.success(
+                "Carteirinha Beta Reemitida",
+                "Sua carteirinha oficial de Beta Tester do Drakoria foi reemitida com o layout atualizado.",
+            )
+            await member.send(
+                embed=dm_embed,
+                file=discord.File(io.BytesIO(card_payload), filename=card_filename),
+            )
+            dm_sent = True
+        except discord.HTTPException:
+            dm_sent = False
+
+        channel_sent = False
+        card_channel_id = self.bot.server_map.beta_program_card_channel_id()
+        card_channel = guild.get_channel(card_channel_id) if card_channel_id else None
+        if isinstance(card_channel, discord.TextChannel):
+            channel_embed = self.bot.embeds.make(
+                title="Carteirinha Oficial Reemitida",
+                description=f"{member.mention} recebeu a carteirinha Beta Tester atualizada.",
+                fields=[
+                    ("Protocolo", f"`BT-{resolved_application_id:06d}`", True),
+                    ("Reemitida por", actor.mention if actor else "sistema", True),
+                    ("Data", self._now_human(), False),
+                ],
+            )
+            await card_channel.send(
+                embed=channel_embed,
+                file=discord.File(io.BytesIO(card_payload), filename=card_filename),
+            )
+            channel_sent = True
+
+        await self.bot.db.update_beta_tester_application(
+            resolved_application_id,
+            {
+                "card_generated": 1,
+                "card_sent_dm": int(dm_sent),
+                "card_sent_channel": int(channel_sent),
+                "last_error": None if dm_sent and channel_sent else "Falha parcial ao reemitir carteirinha.",
+            },
+        )
+        return {
+            "application_id": resolved_application_id,
+            "dm_sent": dm_sent,
+            "channel_sent": channel_sent,
+            "channel_id": card_channel_id,
+        }
 
     @staticmethod
     def _card_auth_code(member_id: int, application_id: int) -> str:

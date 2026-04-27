@@ -30,6 +30,50 @@ class BetaProgramCog(
             ephemeral=True,
         )
 
+    @app_commands.command(name="reemitir_carteirinha", description="Reemite a carteirinha de um Beta Tester aprovado")
+    @app_commands.guild_only()
+    @app_commands.describe(
+        usuario="Usuário aprovado no Programa Beta",
+        candidatura_id="ID da candidatura aprovada; deixe vazio para usar a mais recente",
+        emissao="Texto opcional de emissão preservada, ex: 27/04/2026 03:45 UTC",
+        ingresso="Texto opcional de ingresso preservado, ex: 24/04/2026",
+        codigo_autenticacao="Código opcional já emitido; deixe vazio para recalcular pelo protocolo",
+    )
+    async def reemitir_carteirinha(
+        self,
+        interaction: discord.Interaction,
+        usuario: discord.Member,
+        candidatura_id: int | None = None,
+        emissao: str | None = None,
+        ingresso: str | None = None,
+        codigo_autenticacao: str | None = None,
+    ) -> None:
+        if not self.bot.permission_service.has(interaction.user, "manage_beta_program"):
+            raise app_commands.CheckFailure("Sem permissão para reemitir carteirinhas beta.")
+        if not interaction.guild:
+            raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        result = await self.bot.beta_program_service.reissue_tester_card(
+            interaction.guild,
+            usuario,
+            actor=interaction.user,
+            application_id=candidatura_id,
+            issued_label=emissao,
+            joined_label=ingresso,
+            auth_code=codigo_autenticacao,
+        )
+        await interaction.followup.send(
+            embed=self.bot.embeds.success(
+                "Carteirinha Reemitida",
+                (
+                    f"Candidatura `BT-{result['application_id']:06d}` reemitida para {usuario.mention}.\n"
+                    f"DM: {'enviada' if result['dm_sent'] else 'falhou'}\n"
+                    f"Canal <#{result['channel_id']}>: {'enviado' if result['channel_sent'] else 'falhou'}"
+                ),
+            ),
+            ephemeral=True,
+        )
+
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         if interaction.response.is_done():
             await interaction.followup.send(
