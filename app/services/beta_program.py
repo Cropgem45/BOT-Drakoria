@@ -853,6 +853,7 @@ class BetaProgramService:
         if bold:
             candidates.extend(
                 [
+                    str((Path.cwd() / "data" / "fonts" / "arialbd.ttf").resolve()),
                     "C:/Windows/Fonts/segoeuib.ttf",
                     "C:/Windows/Fonts/arialbd.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -863,6 +864,7 @@ class BetaProgramService:
         else:
             candidates.extend(
                 [
+                    str((Path.cwd() / "data" / "fonts" / "arial.ttf").resolve()),
                     "C:/Windows/Fonts/segoeui.ttf",
                     "C:/Windows/Fonts/arial.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
