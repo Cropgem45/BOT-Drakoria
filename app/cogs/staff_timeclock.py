@@ -20,6 +20,12 @@ class StaffTimeclockCog(
     group_name="ponto",
     group_description="Sistema de jornada da staff — expediente validado por atividade",
 ):
+    jornada = app_commands.Group(name="jornada", description="Controle do expediente pessoal")
+    atividade = app_commands.Group(name="atividade", description="Controle de atividade atual")
+    relatorio = app_commands.Group(name="relatorio", description="Relatorios e consultas de horas")
+    admin = app_commands.Group(name="admin", description="Administracao da Central de Ponto")
+    config = app_commands.Group(name="config", description="Configuracoes do sistema de ponto")
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
@@ -43,7 +49,7 @@ class StaffTimeclockCog(
 
     # ── /ponto iniciar ─────────────────────────────────────────────────────────
 
-    @app_commands.command(name="iniciar", description="Inicia seu expediente")
+    @jornada.command(name="iniciar", description="Inicia seu expediente")
     @app_commands.guild_only()
     async def cmd_iniciar(self, interaction: discord.Interaction, observacao: str | None = None) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -51,26 +57,26 @@ class StaffTimeclockCog(
         await interaction.followup.send(
             embed=self.bot.embeds.success(
                 "Expediente Iniciado",
-                f"Seu expediente foi iniciado.\nAtividade inicial: **Não classificado**\nUse `/ponto atividade` para classificar o que está fazendo.",
+                f"Seu expediente foi iniciado.\nAtividade inicial: **Não classificado**\nUse `/ponto atividade trocar` para classificar o que está fazendo.",
             ),
             ephemeral=True,
         )
 
     # ── /ponto pausar ──────────────────────────────────────────────────────────
 
-    @app_commands.command(name="pausar", description="Pausa o expediente atual")
+    @jornada.command(name="pausar", description="Pausa o expediente atual")
     @app_commands.guild_only()
     async def cmd_pausar(self, interaction: discord.Interaction, motivo: str | None = None) -> None:
         await interaction.response.defer(ephemeral=True)
         await self.svc.pause_session(interaction.user, reason=motivo)
         await interaction.followup.send(
-            embed=self.bot.embeds.make(title="Expediente Pausado", description="Seu expediente foi pausado. Use `/ponto retomar` para continuar."),
+            embed=self.bot.embeds.make(title="Expediente Pausado", description="Seu expediente foi pausado. Use `/ponto jornada retomar` para continuar."),
             ephemeral=True,
         )
 
     # ── /ponto retomar ─────────────────────────────────────────────────────────
 
-    @app_commands.command(name="retomar", description="Retoma o expediente pausado")
+    @jornada.command(name="retomar", description="Retoma o expediente pausado")
     @app_commands.guild_only()
     async def cmd_retomar(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -82,7 +88,7 @@ class StaffTimeclockCog(
 
     # ── /ponto encerrar ────────────────────────────────────────────────────────
 
-    @app_commands.command(name="encerrar", description="Encerra o expediente atual")
+    @jornada.command(name="encerrar", description="Encerra o expediente atual")
     @app_commands.guild_only()
     async def cmd_encerrar(
         self,
@@ -114,7 +120,7 @@ class StaffTimeclockCog(
 
     # ── /ponto atividade ───────────────────────────────────────────────────────
 
-    @app_commands.command(name="atividade", description="Marca ou troca a atividade atual do expediente")
+    @atividade.command(name="trocar", description="Marca ou troca a atividade atual do expediente")
     @app_commands.guild_only()
     async def cmd_atividade(self, interaction: discord.Interaction, atividade: str) -> None:
         if atividade not in ACTIVITIES:
@@ -136,7 +142,7 @@ class StaffTimeclockCog(
 
     # ── /ponto minhas_horas ────────────────────────────────────────────────────
 
-    @app_commands.command(name="minhas_horas", description="Mostra seu relatório individual de horas")
+    @relatorio.command(name="minhas_horas", description="Mostra seu relatório individual de horas")
     @app_commands.guild_only()
     async def cmd_minhas_horas(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -145,7 +151,7 @@ class StaffTimeclockCog(
 
     # ── /ponto staff ───────────────────────────────────────────────────────────
 
-    @app_commands.command(name="staff", description="Relatório individual de outro membro da staff")
+    @relatorio.command(name="staff", description="Relatório individual de outro membro da staff")
     @app_commands.guild_only()
     async def cmd_staff(self, interaction: discord.Interaction, membro: discord.Member) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -156,7 +162,7 @@ class StaffTimeclockCog(
 
     # ── /ponto status ──────────────────────────────────────────────────────────
 
-    @app_commands.command(name="status", description="Mostra quem está em expediente, pausado ou pendente agora")
+    @relatorio.command(name="status", description="Mostra quem está em expediente, pausado ou pendente agora")
     @app_commands.guild_only()
     async def cmd_status(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -165,7 +171,7 @@ class StaffTimeclockCog(
 
     # ── /ponto ranking ─────────────────────────────────────────────────────────
 
-    @app_commands.command(name="ranking", description="Ranking de horas da staff por período")
+    @relatorio.command(name="ranking", description="Ranking de horas da staff por período")
     @app_commands.guild_only()
     async def cmd_ranking(self, interaction: discord.Interaction, periodo: str = "semana") -> None:
         await interaction.response.defer(ephemeral=True)
@@ -179,7 +185,7 @@ class StaffTimeclockCog(
 
     # ── /ponto relatorio ───────────────────────────────────────────────────────
 
-    @app_commands.command(name="relatorio", description="Relatório geral da staff por período")
+    @relatorio.command(name="geral", description="Relatório geral da staff por período")
     @app_commands.guild_only()
     async def cmd_relatorio(self, interaction: discord.Interaction, periodo: str = "semana") -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -195,7 +201,7 @@ class StaffTimeclockCog(
 
     # ── /ponto pendentes ───────────────────────────────────────────────────────
 
-    @app_commands.command(name="pendentes", description="Lista sessões pendentes de validação")
+    @admin.command(name="pendentes", description="Lista sessões pendentes de validação")
     @app_commands.guild_only()
     async def cmd_pendentes(self, interaction: discord.Interaction) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -217,14 +223,14 @@ class StaffTimeclockCog(
             embed=self.bot.embeds.make(
                 title="Sessões Pendentes de Validação",
                 description="\n".join(lines),
-                fields=[("Ação", "Use `/ponto revisar session_id:ID` para aprovar ou invalidar.", False)],
+                fields=[("Ação", "Use `/ponto admin revisar session_id:ID` para aprovar ou invalidar.", False)],
             ),
             ephemeral=True,
         )
 
     # ── /ponto revisar ─────────────────────────────────────────────────────────
 
-    @app_commands.command(name="revisar", description="Aprova ou invalida uma sessão pendente")
+    @admin.command(name="revisar", description="Aprova ou invalida uma sessão pendente")
     @app_commands.guild_only()
     async def cmd_revisar(
         self,
@@ -246,7 +252,7 @@ class StaffTimeclockCog(
 
     # ── /ponto ajustar ─────────────────────────────────────────────────────────
 
-    @app_commands.command(name="ajustar", description="Adiciona ou remove horas manualmente de um membro da staff")
+    @admin.command(name="ajustar", description="Adiciona ou remove horas manualmente de um membro da staff")
     @app_commands.guild_only()
     async def cmd_ajustar(
         self,
@@ -271,7 +277,7 @@ class StaffTimeclockCog(
 
     # ── /ponto configurar_cargo ────────────────────────────────────────────────
 
-    @app_commands.command(name="configurar_cargo", description="Adiciona ou remove um cargo como staff no sistema de jornada")
+    @config.command(name="cargo", description="Adiciona ou remove um cargo como staff no sistema de jornada")
     @app_commands.guild_only()
     async def cmd_configurar_cargo(
         self,
@@ -303,7 +309,7 @@ class StaffTimeclockCog(
 
     # ── /ponto configurar_canal ────────────────────────────────────────────────
 
-    @app_commands.command(name="configurar_canal", description="Define a regra de um canal de voz para o expediente")
+    @config.command(name="canal", description="Define a regra de um canal de voz para o expediente")
     @app_commands.guild_only()
     async def cmd_configurar_canal(
         self,
@@ -347,7 +353,7 @@ class StaffTimeclockCog(
 
     # ── /ponto remover_canal ───────────────────────────────────────────────────
 
-    @app_commands.command(name="remover_canal", description="Remove a regra de um canal de voz")
+    @config.command(name="remover_canal", description="Remove a regra de um canal de voz")
     @app_commands.guild_only()
     async def cmd_remover_canal(self, interaction: discord.Interaction, canal: discord.VoiceChannel) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -361,7 +367,7 @@ class StaffTimeclockCog(
 
     # ── /ponto listar_canais ───────────────────────────────────────────────────
 
-    @app_commands.command(name="listar_canais", description="Lista os canais configurados para o expediente")
+    @config.command(name="listar_canais", description="Lista os canais configurados para o expediente")
     @app_commands.guild_only()
     async def cmd_listar_canais(self, interaction: discord.Interaction) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -387,7 +393,7 @@ class StaffTimeclockCog(
 
     # ── /ponto listar_cargos ───────────────────────────────────────────────────
 
-    @app_commands.command(name="listar_cargos", description="Lista os cargos de staff configurados")
+    @config.command(name="listar_cargos", description="Lista os cargos de staff configurados")
     @app_commands.guild_only()
     async def cmd_listar_cargos(self, interaction: discord.Interaction) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -407,7 +413,7 @@ class StaffTimeclockCog(
 
     # ── /ponto exportar ────────────────────────────────────────────────────────
 
-    @app_commands.command(name="exportar", description="Exporta relatório da staff em CSV")
+    @relatorio.command(name="exportar", description="Exporta relatório da staff em CSV")
     @app_commands.guild_only()
     async def cmd_exportar(self, interaction: discord.Interaction, periodo: str = "semana") -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -423,7 +429,7 @@ class StaffTimeclockCog(
 
     # ── /ponto meu_estado ──────────────────────────────────────────────────────
 
-    @app_commands.command(name="meu_estado", description="Verifica o estado atual do seu expediente")
+    @jornada.command(name="estado", description="Verifica o estado atual do seu expediente")
     @app_commands.guild_only()
     async def cmd_meu_estado(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -436,7 +442,7 @@ class StaffTimeclockCog(
 
     # ── Error handler ──────────────────────────────────────────────────────────
 
-    @app_commands.command(name="admin", description="Mostra o painel administrativo geral do ponto")
+    @admin.command(name="painel", description="Mostra o painel administrativo geral do ponto")
     @app_commands.guild_only()
     async def cmd_admin(self, interaction: discord.Interaction) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -448,7 +454,7 @@ class StaffTimeclockCog(
             ephemeral=True,
         )
 
-    @app_commands.command(name="configurar_central", description="Define o canal da Central de Ponto da Staff")
+    @config.command(name="central", description="Define o canal da Central de Ponto da Staff")
     @app_commands.guild_only()
     async def cmd_configurar_central(self, interaction: discord.Interaction, canal: discord.TextChannel) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -457,7 +463,7 @@ class StaffTimeclockCog(
         await self.svc.configure_control_channel(interaction.guild, canal)
         await interaction.followup.send(embed=self.bot.embeds.success("Central Configurada", f"A Central de Ponto da Staff agora e {canal.mention}."), ephemeral=True)
 
-    @app_commands.command(name="configurar_logs", description="Define o canal de logs administrativos do ponto")
+    @config.command(name="logs", description="Define o canal de logs administrativos do ponto")
     @app_commands.guild_only()
     async def cmd_configurar_logs(self, interaction: discord.Interaction, canal: discord.TextChannel) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -466,7 +472,7 @@ class StaffTimeclockCog(
         await self.svc.configure_logs_channel(interaction.guild, canal)
         await interaction.followup.send(embed=self.bot.embeds.success("Logs Configurados", f"Os logs administrativos do ponto agora vao para {canal.mention}."), ephemeral=True)
 
-    @app_commands.command(name="lembrar", description="Envia lembrete de ponto para uma staff")
+    @admin.command(name="lembrar", description="Envia lembrete de ponto para uma staff")
     @app_commands.guild_only()
     async def cmd_lembrar(self, interaction: discord.Interaction, usuario: discord.Member) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -475,7 +481,7 @@ class StaffTimeclockCog(
         await self.svc.remind_member(interaction.guild, usuario, interaction.user)
         await interaction.followup.send(embed=self.bot.embeds.success("Lembrete Enviado", f"Lembrete enviado para {usuario.mention} na Central de Ponto."), ephemeral=True)
 
-    @app_commands.command(name="lembrar_todos", description="Lembra todos em call valida sem expediente ativo")
+    @admin.command(name="lembrar_todos", description="Lembra todos em call valida sem expediente ativo")
     @app_commands.guild_only()
     async def cmd_lembrar_todos(self, interaction: discord.Interaction) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -484,7 +490,7 @@ class StaffTimeclockCog(
         count = await self.svc.remind_all_voice_without_session(interaction.guild, interaction.user)
         await interaction.followup.send(embed=self.bot.embeds.success("Lembretes Enviados", f"{count} staff(s) lembrado(s)."), ephemeral=True)
 
-    @app_commands.command(name="forcar_pausa", description="Pausa o expediente de uma staff com motivo obrigatorio")
+    @admin.command(name="forcar_pausa", description="Pausa o expediente de uma staff com motivo obrigatorio")
     @app_commands.guild_only()
     async def cmd_forcar_pausa(self, interaction: discord.Interaction, usuario: discord.Member, motivo: str) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -493,7 +499,7 @@ class StaffTimeclockCog(
         await self.svc.force_pause(interaction.guild, usuario, interaction.user, motivo)
         await interaction.followup.send(embed=self.bot.embeds.success("Expediente Pausado", f"Expediente de {usuario.mention} pausado.\nMotivo: {motivo}"), ephemeral=True)
 
-    @app_commands.command(name="forcar_encerrar", description="Encerra o expediente de uma staff com motivo obrigatorio")
+    @admin.command(name="forcar_encerrar", description="Encerra o expediente de uma staff com motivo obrigatorio")
     @app_commands.guild_only()
     async def cmd_forcar_encerrar(self, interaction: discord.Interaction, usuario: discord.Member, motivo: str) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -502,8 +508,6 @@ class StaffTimeclockCog(
         await self.svc.force_end(interaction.guild, usuario, interaction.user, motivo)
         await interaction.followup.send(embed=self.bot.embeds.success("Expediente Encerrado", f"Expediente de {usuario.mention} encerrado.\nMotivo: {motivo}"), ephemeral=True)
 
-    @app_commands.command(name="revisar_pendentes", description="Mostra sessoes pendentes de revisao")
-    @app_commands.guild_only()
     async def cmd_revisar_pendentes(self, interaction: discord.Interaction) -> None:
         if not self.svc.has_manage_permission(interaction.user):
             raise app_commands.CheckFailure("Apenas lideranca pode revisar pendencias.")
@@ -511,7 +515,7 @@ class StaffTimeclockCog(
         embed = await self.svc.build_pending_review_embed(interaction.guild)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="aprovar_pendente", description="Aprova uma sessao pendente")
+    @admin.command(name="aprovar_pendente", description="Aprova uma sessao pendente")
     @app_commands.guild_only()
     async def cmd_aprovar_pendente(self, interaction: discord.Interaction, session_id: int, observacao: str | None = None) -> None:
         if not self.svc.has_manage_permission(interaction.user):
@@ -520,7 +524,7 @@ class StaffTimeclockCog(
         result = await self.svc.review_pending_session(interaction.guild, session_id, interaction.user, "approve", observacao)
         await interaction.followup.send(embed=self.bot.embeds.success("Pendente Aprovado", result), ephemeral=True)
 
-    @app_commands.command(name="reprovar_pendente", description="Reprova/invalida uma sessao pendente")
+    @admin.command(name="reprovar_pendente", description="Reprova/invalida uma sessao pendente")
     @app_commands.guild_only()
     async def cmd_reprovar_pendente(self, interaction: discord.Interaction, session_id: int, observacao: str | None = None) -> None:
         if not self.svc.has_manage_permission(interaction.user):

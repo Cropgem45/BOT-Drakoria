@@ -463,7 +463,7 @@ class StaffTimeclockService:
             await self._dispatch_log(
                 member.guild,
                 "Central de Ponto nao configurada",
-                "Configure com `/ponto configurar_central canal:#canal` para receber alertas criticos.",
+                "Configure com `/ponto config central canal:#canal` para receber alertas criticos.",
                 color=self.bot.embeds.warning_color,
             )
             return
@@ -994,7 +994,7 @@ class StaffTimeclockService:
     async def publish_admin_panel(self, guild: discord.Guild, channel: discord.TextChannel | None = None) -> discord.Message:
         target = channel or await self._control_channel(guild)
         if not isinstance(target, discord.TextChannel):
-            raise RuntimeError("Central de Ponto nao configurada. Use `/ponto configurar_central canal:#canal`.")
+            raise RuntimeError("Central de Ponto nao configurada. Use `/ponto config central canal:#canal`.")
         from app.core.staff_timeclock_views import StaffTimeclockAdminPanelView
         embed = await self.build_admin_panel_embed(guild)
         view = StaffTimeclockAdminPanelView(self.bot)
@@ -1082,7 +1082,7 @@ class StaffTimeclockService:
         return self.bot.embeds.make(
             title="Pendencias de Ponto",
             description="\n".join(lines) or "Nenhuma pendencia no momento.",
-            fields=[("Como revisar", "Use `/ponto revisar`, `/ponto aprovar_pendente` ou `/ponto reprovar_pendente`.", False)],
+            fields=[("Como revisar", "Use `/ponto admin revisar`, `/ponto admin aprovar_pendente` ou `/ponto admin reprovar_pendente`.", False)],
         )
 
     async def remind_member(self, guild: discord.Guild, target: discord.Member, admin: discord.Member | None = None) -> None:
