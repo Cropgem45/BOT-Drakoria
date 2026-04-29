@@ -517,6 +517,86 @@ class Database:
                 ON staff_work_events (guild_id, created_at DESC);
                 """
             )
+        await conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS staff_timeclock_config (
+                guild_id INTEGER PRIMARY KEY,
+                control_channel_id INTEGER,
+                logs_channel_id INTEGER,
+                auto_prompt_on_voice_join INTEGER NOT NULL DEFAULT 1,
+                reminder_after_seconds INTEGER NOT NULL DEFAULT 180,
+                admin_alert_after_seconds INTEGER NOT NULL DEFAULT 600,
+                auto_pause_on_voice_leave INTEGER NOT NULL DEFAULT 1,
+                auto_pause_delay_seconds INTEGER NOT NULL DEFAULT 120,
+                auto_pause_on_afk INTEGER NOT NULL DEFAULT 1,
+                checkin_voice_seconds INTEGER NOT NULL DEFAULT 3600,
+                checkin_external_seconds INTEGER NOT NULL DEFAULT 1800,
+                checkin_timeout_seconds INTEGER NOT NULL DEFAULT 300,
+                alert_cooldown_seconds INTEGER NOT NULL DEFAULT 600,
+                admin_panel_auto_refresh_seconds INTEGER NOT NULL DEFAULT 120,
+                use_dm_as_fallback INTEGER NOT NULL DEFAULT 0,
+                test_mode INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS staff_call_presence_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                channel_id INTEGER,
+                alert_type TEXT NOT NULL,
+                message_id INTEGER,
+                started_at TEXT NOT NULL,
+                last_reminder_at TEXT,
+                ignored_until TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                metadata_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_presence_alert_unique_active
+            ON staff_call_presence_alerts (guild_id, user_id, alert_type)
+            WHERE status = 'active';
+
+            CREATE INDEX IF NOT EXISTS idx_staff_presence_alerts_guild_status
+            ON staff_call_presence_alerts (guild_id, status, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS staff_timeclock_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                notification_type TEXT NOT NULL,
+                channel_id INTEGER,
+                message_id INTEGER,
+                sent_at TEXT NOT NULL,
+                answered_at TEXT,
+                status TEXT NOT NULL DEFAULT 'sent',
+                metadata_json TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS staff_admin_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                admin_id INTEGER NOT NULL,
+                target_user_id INTEGER,
+                action_type TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                metadata_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS staff_timeclock_admin_panel_state (
+                guild_id INTEGER PRIMARY KEY,
+                channel_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        columns = await self._table_columns(conn, "staff_voice_channel_rules")
+        if "activity_suggested" not in columns:
+            await conn.execute("ALTER TABLE staff_voice_channel_rules ADD COLUMN activity_suggested TEXT")
 
     async def _table_columns(self, conn: aiosqlite.Connection, table_name: str) -> set[str]:
         rows = await self.fetchall(conn, f"PRAGMA table_info({table_name})", ())
@@ -1960,6 +2040,25 @@ class Database:
             (guild_id, channel_id, rule_type),
         )
 
+    async def set_channel_rule_v3(
+        self,
+        guild_id: int,
+        channel_id: int,
+        rule_type: str,
+        activity_suggested: str | None = None,
+    ) -> None:
+        await self._run_write(
+            """
+            INSERT INTO staff_voice_channel_rules (guild_id, channel_id, rule_type, activity_suggested, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id, channel_id) DO UPDATE SET
+                rule_type = excluded.rule_type,
+                activity_suggested = excluded.activity_suggested,
+                updated_at = excluded.updated_at
+            """,
+            (guild_id, channel_id, rule_type, activity_suggested),
+        )
+
     async def remove_channel_rule(self, guild_id: int, channel_id: int) -> None:
         await self._run_write(
             "DELETE FROM staff_voice_channel_rules WHERE guild_id = ? AND channel_id = ?",
@@ -2257,3 +2356,203 @@ class Database:
             (guild_id, channel_id, message_id),
         )
 
+    async def get_staff_timeclock_config(self, guild_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(conn, "SELECT * FROM staff_timeclock_config WHERE guild_id = ?", (guild_id,))
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def update_staff_timeclock_config(self, guild_id: int, fields: dict[str, Any]) -> None:
+        if not fields:
+            return
+        columns = [
+            "guild_id", "control_channel_id", "logs_channel_id", "auto_prompt_on_voice_join",
+            "reminder_after_seconds", "admin_alert_after_seconds", "auto_pause_on_voice_leave",
+            "auto_pause_delay_seconds", "auto_pause_on_afk", "checkin_voice_seconds",
+            "checkin_external_seconds", "checkin_timeout_seconds", "alert_cooldown_seconds",
+            "admin_panel_auto_refresh_seconds", "use_dm_as_fallback", "test_mode"
+        ]
+        defaults = {
+            "guild_id": guild_id,
+            "control_channel_id": None,
+            "logs_channel_id": None,
+            "auto_prompt_on_voice_join": 1,
+            "reminder_after_seconds": 180,
+            "admin_alert_after_seconds": 600,
+            "auto_pause_on_voice_leave": 1,
+            "auto_pause_delay_seconds": 120,
+            "auto_pause_on_afk": 1,
+            "checkin_voice_seconds": 3600,
+            "checkin_external_seconds": 1800,
+            "checkin_timeout_seconds": 300,
+            "alert_cooldown_seconds": 600,
+            "admin_panel_auto_refresh_seconds": 120,
+            "use_dm_as_fallback": 0,
+            "test_mode": 0,
+        }
+        current = await self.get_staff_timeclock_config(guild_id) or {}
+        current = {**defaults, **current}
+        merged = {**current, **fields, "guild_id": guild_id}
+        values = tuple(merged.get(col) for col in columns)
+        assignments = ", ".join(f"{col} = excluded.{col}" for col in columns if col != "guild_id")
+        await self._run_write(
+            f"""
+            INSERT INTO staff_timeclock_config ({", ".join(columns)}, updated_at)
+            VALUES ({", ".join("?" for _ in columns)}, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id) DO UPDATE SET {assignments}, updated_at = CURRENT_TIMESTAMP
+            """,
+            values,
+        )
+
+    async def upsert_staff_presence_alert(
+        self,
+        guild_id: int,
+        user_id: int,
+        alert_type: str,
+        channel_id: int | None,
+        message_id: int | None,
+        started_at: str,
+        metadata_json: str | None = None,
+    ) -> int:
+        conn = await self.connect()
+        try:
+            await conn.execute(
+                """
+                INSERT INTO staff_call_presence_alerts (
+                    guild_id, user_id, channel_id, alert_type, message_id,
+                    started_at, last_reminder_at, status, metadata_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+                ON CONFLICT(guild_id, user_id, alert_type) WHERE status = 'active'
+                DO UPDATE SET
+                    channel_id = excluded.channel_id,
+                    message_id = COALESCE(excluded.message_id, staff_call_presence_alerts.message_id),
+                    last_reminder_at = excluded.last_reminder_at,
+                    metadata_json = excluded.metadata_json,
+                    updated_at = excluded.updated_at
+                """,
+                (guild_id, user_id, channel_id, alert_type, message_id, started_at, started_at, metadata_json, started_at),
+            )
+            await conn.commit()
+            row = await self.fetchone(
+                conn,
+                """
+                SELECT id FROM staff_call_presence_alerts
+                WHERE guild_id = ? AND user_id = ? AND alert_type = ? AND status = 'active'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (guild_id, user_id, alert_type),
+            )
+        finally:
+            await conn.close()
+        return int(row["id"])
+
+    async def update_staff_presence_alert(self, alert_id: int, fields: dict[str, Any]) -> None:
+        if not fields:
+            return
+        columns = ", ".join(f"{col} = ?" for col in fields)
+        params = tuple(fields.values()) + (alert_id,)
+        await self._run_write(f"UPDATE staff_call_presence_alerts SET {columns} WHERE id = ?", params)
+
+    async def get_active_staff_presence_alert(self, guild_id: int, user_id: int, alert_type: str) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                """
+                SELECT * FROM staff_call_presence_alerts
+                WHERE guild_id = ? AND user_id = ? AND alert_type = ? AND status = 'active'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (guild_id, user_id, alert_type),
+            )
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def list_active_staff_presence_alerts(self, guild_id: int, alert_type: str | None = None) -> list[dict[str, Any]]:
+        where = ["guild_id = ?", "status = 'active'"]
+        params: list[Any] = [guild_id]
+        if alert_type is not None:
+            where.append("alert_type = ?")
+            params.append(alert_type)
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(
+                conn,
+                "SELECT * FROM staff_call_presence_alerts WHERE " + " AND ".join(where) + " ORDER BY updated_at DESC",
+                tuple(params),
+            )
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def resolve_staff_presence_alert(self, guild_id: int, user_id: int, alert_type: str, status: str = "resolved") -> None:
+        await self._run_write(
+            """
+            UPDATE staff_call_presence_alerts
+            SET status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE guild_id = ? AND user_id = ? AND alert_type = ? AND status = 'active'
+            """,
+            (status, guild_id, user_id, alert_type),
+        )
+
+    async def add_staff_notification(
+        self,
+        guild_id: int,
+        user_id: int,
+        notification_type: str,
+        sent_at: str,
+        channel_id: int | None = None,
+        message_id: int | None = None,
+        status: str = "sent",
+        metadata_json: str | None = None,
+    ) -> None:
+        await self._run_write(
+            """
+            INSERT INTO staff_timeclock_notifications (
+                guild_id, user_id, notification_type, channel_id, message_id,
+                sent_at, status, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (guild_id, user_id, notification_type, channel_id, message_id, sent_at, status, metadata_json),
+        )
+
+    async def add_staff_admin_action(
+        self,
+        guild_id: int,
+        admin_id: int,
+        target_user_id: int | None,
+        action_type: str,
+        reason: str,
+        metadata_json: str | None = None,
+    ) -> None:
+        await self._run_write(
+            """
+            INSERT INTO staff_admin_actions (guild_id, admin_id, target_user_id, action_type, reason, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (guild_id, admin_id, target_user_id, action_type, reason, metadata_json),
+        )
+
+    async def get_staff_timeclock_admin_panel(self, guild_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(conn, "SELECT * FROM staff_timeclock_admin_panel_state WHERE guild_id = ?", (guild_id,))
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def save_staff_timeclock_admin_panel(self, guild_id: int, channel_id: int, message_id: int) -> None:
+        await self._run_write(
+            """
+            INSERT INTO staff_timeclock_admin_panel_state (guild_id, channel_id, message_id, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                channel_id = excluded.channel_id,
+                message_id = excluded.message_id,
+                updated_at = excluded.updated_at
+            """,
+            (guild_id, channel_id, message_id),
+        )

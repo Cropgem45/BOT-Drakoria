@@ -313,10 +313,28 @@ class ServerMap:
         return int(raw)
 
     def staff_timeclock_log_channel_id(self) -> int | None:
-        raw = self.staff_timeclock().get("log_channel_id")
+        raw = self.staff_timeclock().get("logs_channel_id", self.staff_timeclock().get("log_channel_id"))
         if raw in (None, "", 0):
             return self.voice_point_log_channel_id()
         return int(raw)
+
+    def staff_timeclock_control_channel_id(self) -> int | None:
+        raw = self.staff_timeclock().get("control_channel_id")
+        if raw in (None, "", 0):
+            return self.staff_timeclock_panel_channel_id()
+        return int(raw)
+
+    def staff_timeclock_reminder_after_seconds(self) -> int:
+        return int(self.staff_timeclock().get("reminder_after_seconds", self.staff_timeclock().get("reminder_after_minutes", 3) * 60))
+
+    def staff_timeclock_admin_alert_after_seconds(self) -> int:
+        return int(self.staff_timeclock().get("admin_alert_after_seconds", self.staff_timeclock().get("admin_alert_after_minutes", 10) * 60))
+
+    def staff_timeclock_auto_pause_delay_seconds(self) -> int:
+        return int(self.staff_timeclock().get("auto_pause_delay_seconds", self.staff_timeclock().get("auto_pause_delay_minutes", 2) * 60))
+
+    def staff_timeclock_alert_cooldown_seconds(self) -> int:
+        return int(self.staff_timeclock().get("alert_cooldown_seconds", self.staff_timeclock().get("alert_cooldown_minutes", 10) * 60))
 
     def staff_timeclock_checkin_interval_in_call(self) -> int:
         return int(self.staff_timeclock().get("checkin_interval_in_call_seconds", 3600))
@@ -332,4 +350,3 @@ class ServerMap:
 
     def staff_timeclock_manage_role_ids(self) -> list[int]:
         return [int(rid) for rid in self.staff_timeclock().get("manage_timeclock_role_ids", [])]
-

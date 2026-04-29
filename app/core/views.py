@@ -3,7 +3,14 @@
 from typing import Any
 
 import discord
-from app.core.staff_timeclock_views import StaffTimeclockPanelView
+from app.core.staff_timeclock_views import (
+    AfkAutoPausedAlertView,
+    LeftVoiceActiveAlertView,
+    PausedInValidVoiceAlertView,
+    StaffTimeclockAdminPanelView,
+    StaffTimeclockPanelView,
+    VoiceWithoutSessionAlertView,
+)
 
 
 class ViewFactory:
@@ -30,6 +37,12 @@ class ViewFactory:
         self.bot.registered_persistent_views["voice_point_panel"] = 1
         self.bot.add_view(StaffTimeclockPanelView(self.bot))
         self.bot.registered_persistent_views["staff_timeclock_panel"] = 1
+        self.bot.add_view(VoiceWithoutSessionAlertView(self.bot))
+        self.bot.add_view(LeftVoiceActiveAlertView(self.bot))
+        self.bot.add_view(PausedInValidVoiceAlertView(self.bot))
+        self.bot.add_view(AfkAutoPausedAlertView(self.bot))
+        self.bot.add_view(StaffTimeclockAdminPanelView(self.bot))
+        self.bot.registered_persistent_views["staff_timeclock_v3_alerts"] = 5
         beta_review_count = 0
         for application_id in await self.bot.db.list_pending_beta_tester_application_ids(self.bot.server_map.guild_id()):
             self.bot.add_view(BetaApplicationReviewView(self.bot, application_id))

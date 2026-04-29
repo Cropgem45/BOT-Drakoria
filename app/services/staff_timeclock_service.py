@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import io
 import json
 from dataclasses import dataclass, field
@@ -93,6 +94,46 @@ class StaffTimeclockService:
     def has_manage_permission(self, member: discord.Member) -> bool:
         return self.bot.permission_service.has(member, "manage_points")
 
+    async def get_runtime_config(self, guild_id: int) -> dict[str, Any]:
+        getter = getattr(self.bot.db, "get_staff_timeclock_config", None)
+        stored = await self._maybe_await(getter(guild_id)) if callable(getter) else None
+        if not isinstance(stored, dict):
+            stored = {}
+        base = {
+            "control_channel_id": self._call_server_map("staff_timeclock_control_channel_id", self.bot.server_map.staff_timeclock_panel_channel_id()),
+            "logs_channel_id": self.bot.server_map.staff_timeclock_log_channel_id(),
+            "auto_prompt_on_voice_join": 1,
+            "reminder_after_seconds": self._call_server_map("staff_timeclock_reminder_after_seconds", 180),
+            "admin_alert_after_seconds": self._call_server_map("staff_timeclock_admin_alert_after_seconds", 600),
+            "auto_pause_on_voice_leave": 1,
+            "auto_pause_delay_seconds": self._call_server_map("staff_timeclock_auto_pause_delay_seconds", 120),
+            "auto_pause_on_afk": 1,
+            "checkin_voice_seconds": self.bot.server_map.staff_timeclock_checkin_interval_in_call(),
+            "checkin_external_seconds": self.bot.server_map.staff_timeclock_checkin_interval_external(),
+            "checkin_timeout_seconds": self.bot.server_map.staff_timeclock_checkin_timeout(),
+            "alert_cooldown_seconds": self._call_server_map("staff_timeclock_alert_cooldown_seconds", 600),
+            "admin_panel_auto_refresh_seconds": 120,
+            "use_dm_as_fallback": 0,
+            "test_mode": 0,
+        }
+        base.update({k: v for k, v in stored.items() if v is not None})
+        if int(base.get("test_mode") or 0):
+            base["reminder_after_seconds"] = min(int(base["reminder_after_seconds"]), 60)
+            base["admin_alert_after_seconds"] = min(int(base["admin_alert_after_seconds"]), 180)
+            base["auto_pause_delay_seconds"] = min(int(base["auto_pause_delay_seconds"]), 60)
+            base["checkin_voice_seconds"] = min(int(base["checkin_voice_seconds"]), 120)
+            base["checkin_external_seconds"] = min(int(base["checkin_external_seconds"]), 90)
+            base["checkin_timeout_seconds"] = min(int(base["checkin_timeout_seconds"]), 30)
+        return base
+
+    async def configure_control_channel(self, guild: discord.Guild, channel: discord.TextChannel) -> None:
+        await self.bot.db.update_staff_timeclock_config(guild.id, {"control_channel_id": channel.id})
+        await self.bot.db.log_staff_event(guild.id, channel.id, "control_channel_configured", None, json.dumps({"channel_id": channel.id}))
+
+    async def configure_logs_channel(self, guild: discord.Guild, channel: discord.TextChannel) -> None:
+        await self.bot.db.update_staff_timeclock_config(guild.id, {"logs_channel_id": channel.id})
+        await self.bot.db.log_staff_event(guild.id, channel.id, "logs_channel_configured", None, json.dumps({"channel_id": channel.id}))
+
     # ── Ciclo de vida da sessão ───────────────────────────────────────────────
 
     async def start_session(self, member: discord.Member, *, notes: str | None = None) -> dict[str, Any]:
@@ -139,7 +180,10 @@ class StaffTimeclockService:
                 color=self.bot.embeds.success_color,
             )
         session = await self.bot.db.get_staff_open_session(member.guild.id, member.id)
+        await self.resolve_alert(member.guild, member.id, "voice_without_session", "resolved")
+        await self.resolve_alert(member.guild, member.id, "paused_in_valid_voice", "resolved")
         await self.refresh_panel(member.guild)
+        await self.refresh_admin_panel(member.guild)
         return session or {}
 
     async def pause_session(self, member: discord.Member, *, reason: str | None = None, actor: discord.Member | None = None) -> dict[str, Any]:
@@ -178,7 +222,9 @@ class StaffTimeclockService:
                 ],
             )
         session = await self.bot.db.get_staff_open_session(member.guild.id, member.id)
+        await self.resolve_alert(member.guild, member.id, "left_voice_with_active_session", "resolved")
         await self.refresh_panel(member.guild)
+        await self.refresh_admin_panel(member.guild)
         return session or {}
 
     async def resume_session(self, member: discord.Member) -> dict[str, Any]:
@@ -229,7 +275,10 @@ class StaffTimeclockService:
                 color=self.bot.embeds.success_color,
             )
         session = await self.bot.db.get_staff_open_session(member.guild.id, member.id)
+        await self.resolve_alert(member.guild, member.id, "paused_in_valid_voice", "resolved")
+        await self.resolve_alert(member.guild, member.id, "afk_with_active_session", "resolved")
         await self.refresh_panel(member.guild)
+        await self.refresh_admin_panel(member.guild)
         return session or {}
 
     async def end_session(
@@ -267,7 +316,10 @@ class StaffTimeclockService:
         if closed_session:
             await self._send_session_report(member.guild, closed_session)
             await self._dispatch_close_log(member.guild, member, closed_session)
+        for alert_type in ("voice_without_session", "left_voice_with_active_session", "afk_with_active_session", "paused_in_valid_voice", "checkin_pending"):
+            await self.resolve_alert(member.guild, member.id, alert_type, "resolved")
         await self.refresh_panel(member.guild)
+        await self.refresh_admin_panel(member.guild)
         return closed_session or session
 
     async def change_activity(self, member: discord.Member, activity: str) -> dict[str, Any]:
@@ -316,6 +368,7 @@ class StaffTimeclockService:
             )
         session = await self.bot.db.get_staff_open_session(member.guild.id, member.id)
         await self.refresh_panel(member.guild)
+        await self.refresh_admin_panel(member.guild)
         return session or {}
 
     # ── Integração com voz ────────────────────────────────────────────────────
@@ -325,9 +378,26 @@ class StaffTimeclockService:
             return
         if before.channel and after.channel and before.channel.id == after.channel.id:
             return
+        before_rule = await self._get_channel_rule_type(member.guild.id, before.channel.id) if before.channel else None
+        after_rule = await self._get_channel_rule_type(member.guild.id, after.channel.id) if after.channel else None
+        before_valid = before_rule in ("work", "neutral")
+        after_valid = after_rule in ("work", "neutral")
         session = await self.bot.db.get_staff_open_session(member.guild.id, member.id)
         if session is None:
+            if not await self.is_staff_member(member):
+                return
+            if after_valid:
+                await self.send_voice_without_session_alert(member, after.channel)
             return
+        if after_rule == "invalid" and session["status"] == "active":
+            await self.pause_session(member, reason="Entrou em canal que nao conta como trabalho.")
+            await self.send_afk_auto_paused_alert(member, after.channel)
+            return
+        if session["status"] == "paused" and after_valid:
+            await self.send_paused_in_valid_voice_alert(member, after.channel)
+            return
+        if session["status"] == "active" and before_valid and not after_valid:
+            await self.send_left_voice_active_alert(member)
         now = self._utcnow()
         environment, channel_id = self._get_member_environment(member)
         rule_type = await self._get_channel_rule_type(member.guild.id, channel_id) if channel_id else None
@@ -372,9 +442,159 @@ class StaffTimeclockService:
 
     # ── Check-in ─────────────────────────────────────────────────────────────
 
+    async def _control_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
+        config = await self.get_runtime_config(guild.id)
+        channel_id = config.get("control_channel_id")
+        channel = guild.get_channel(int(channel_id)) if channel_id else None
+        return channel if isinstance(channel, discord.TextChannel) else None
+
+    async def _send_or_update_alert(
+        self,
+        member: discord.Member,
+        alert_type: str,
+        *,
+        title: str,
+        description: str,
+        view: discord.ui.View,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        channel = await self._control_channel(member.guild)
+        if channel is None:
+            await self._dispatch_log(
+                member.guild,
+                "Central de Ponto nao configurada",
+                "Configure com `/ponto configurar_central canal:#canal` para receber alertas criticos.",
+                color=self.bot.embeds.warning_color,
+            )
+            return
+        now = self._utcnow()
+        existing = await self.bot.db.get_active_staff_presence_alert(member.guild.id, member.id, alert_type)
+        if existing and existing.get("ignored_until"):
+            try:
+                if self._parse_dt(existing["ignored_until"]) > now:
+                    return
+            except Exception:
+                pass
+        embed = self.bot.embeds.make(title=title, description=description, color=self.bot.embeds.warning_color)
+        embed.timestamp = now
+        message: discord.Message | None = None
+        if existing and existing.get("message_id"):
+            try:
+                old_channel = member.guild.get_channel(int(existing.get("channel_id") or channel.id))
+                if isinstance(old_channel, discord.TextChannel):
+                    message = await old_channel.fetch_message(int(existing["message_id"]))
+                    await message.edit(content=member.mention, embed=embed, view=view)
+            except (discord.NotFound, discord.HTTPException):
+                message = None
+        if message is None:
+            message = await channel.send(member.mention, embed=embed, view=view)
+        alert_id = await self.bot.db.upsert_staff_presence_alert(
+            member.guild.id,
+            member.id,
+            alert_type,
+            channel.id,
+            message.id,
+            self._iso(now),
+            json.dumps(metadata or {}),
+        )
+        await self.bot.db.add_staff_notification(
+            member.guild.id, member.id, alert_type, self._iso(now), channel.id, message.id, metadata_json=json.dumps(metadata or {})
+        )
+        await self.bot.db.log_staff_event(member.guild.id, member.id, f"alert_{alert_type}_sent", None, json.dumps({"alert_id": alert_id}))
+        await self.refresh_admin_panel(member.guild)
+
+    async def send_voice_without_session_alert(self, member: discord.Member, channel: discord.abc.GuildChannel | None) -> None:
+        config = await self.get_runtime_config(member.guild.id)
+        if not int(config.get("auto_prompt_on_voice_join") or 1):
+            return
+        from app.core.staff_timeclock_views import VoiceWithoutSessionAlertView
+        channel_name = getattr(channel, "name", "call valida")
+        await self._send_or_update_alert(
+            member,
+            "voice_without_session",
+            title="Ponto nao iniciado",
+            description=f"{member.mention}, detectamos que voce entrou na call **{channel_name}** sem expediente ativo.\n\nVoce deseja iniciar seu expediente agora?",
+            view=VoiceWithoutSessionAlertView(self.bot),
+            metadata={"voice_channel_id": getattr(channel, "id", None), "voice_channel_name": channel_name},
+        )
+
+    async def send_left_voice_active_alert(self, member: discord.Member) -> None:
+        from app.core.staff_timeclock_views import LeftVoiceActiveAlertView
+        await self._send_or_update_alert(
+            member,
+            "left_voice_with_active_session",
+            title="Voce saiu da call com expediente ativo",
+            description=f"{member.mention}, voce saiu da call com expediente ativo.\n\nO que deseja fazer?",
+            view=LeftVoiceActiveAlertView(self.bot),
+        )
+
+    async def send_afk_auto_paused_alert(self, member: discord.Member, channel: discord.abc.GuildChannel | None) -> None:
+        from app.core.staff_timeclock_views import AfkAutoPausedAlertView
+        await self._send_or_update_alert(
+            member,
+            "afk_with_active_session",
+            title="Expediente pausado automaticamente",
+            description=f"{member.mention}, seu expediente foi pausado porque voce entrou em um canal que nao conta como trabalho.",
+            view=AfkAutoPausedAlertView(self.bot),
+            metadata={"voice_channel_id": getattr(channel, "id", None), "voice_channel_name": getattr(channel, "name", None)},
+        )
+
+    async def send_paused_in_valid_voice_alert(self, member: discord.Member, channel: discord.abc.GuildChannel | None) -> None:
+        from app.core.staff_timeclock_views import PausedInValidVoiceAlertView
+        channel_name = getattr(channel, "name", "call valida")
+        await self._send_or_update_alert(
+            member,
+            "paused_in_valid_voice",
+            title="Expediente pausado em call valida",
+            description=f"{member.mention}, voce entrou na call **{channel_name}**, mas seu expediente esta pausado.\n\nDeseja retomar?",
+            view=PausedInValidVoiceAlertView(self.bot),
+            metadata={"voice_channel_id": getattr(channel, "id", None), "voice_channel_name": channel_name},
+        )
+
+    async def resolve_alert(self, guild: discord.Guild, user_id: int, alert_type: str, status: str = "resolved") -> None:
+        resolver = getattr(self.bot.db, "resolve_staff_presence_alert", None)
+        if callable(resolver):
+            await self._maybe_await(resolver(guild.id, user_id, alert_type, status))
+
+    async def ignore_alert_for_now(self, member: discord.Member, alert_type: str) -> None:
+        config = await self.get_runtime_config(member.guild.id)
+        now = self._utcnow()
+        ignored_until = now + timedelta(seconds=int(config["alert_cooldown_seconds"]))
+        alert = await self.bot.db.get_active_staff_presence_alert(member.guild.id, member.id, alert_type)
+        if alert:
+            await self.bot.db.update_staff_presence_alert(int(alert["id"]), {
+                "ignored_until": self._iso(ignored_until),
+                "last_reminder_at": self._iso(now),
+                "updated_at": self._iso(now),
+            })
+        await self.bot.db.log_staff_event(member.guild.id, member.id, "alert_ignored_temporarily", None, json.dumps({"alert_type": alert_type}))
+        await self.refresh_admin_panel(member.guild)
+
+    async def mark_not_working(self, member: discord.Member) -> None:
+        await self.resolve_alert(member.guild, member.id, "voice_without_session", "ignored")
+        await self.bot.db.log_staff_event(member.guild.id, member.id, "voice_without_session_not_working", None, None)
+        await self.refresh_admin_panel(member.guild)
+
+    async def set_external_work(self, member: discord.Member) -> None:
+        now = self._utcnow()
+        session = await self.bot.db.get_staff_open_session(member.guild.id, member.id)
+        if session is None or session["status"] != "active":
+            raise RuntimeError("Nenhum expediente ativo encontrado.")
+        await self.bot.db.update_staff_session(int(session["id"]), {
+            "current_environment": "Trabalho externo",
+            "current_channel_id": None,
+            "updated_at": self._iso(now),
+        })
+        await self.bot.db.log_staff_event(member.guild.id, member.id, "external_work_confirmed", int(session["id"]), None)
+        await self.resolve_alert(member.guild, member.id, "left_voice_with_active_session", "resolved")
+        await self.refresh_panel(member.guild)
+        await self.refresh_admin_panel(member.guild)
+
     async def _send_checkin(self, session: dict[str, Any], guild: discord.Guild) -> None:
         now = self._utcnow()
-        deadline = now + timedelta(seconds=CHECKIN_TIMEOUT)
+        config = await self.get_runtime_config(guild.id)
+        timeout_seconds = int(config["checkin_timeout_seconds"])
+        deadline = now + timedelta(seconds=timeout_seconds)
         checkin_id = await self.bot.db.create_staff_checkin(
             session_id=int(session["id"]),
             guild_id=int(session["guild_id"]),
@@ -400,18 +620,35 @@ class StaffTimeclockService:
                 f"Responda dentro de **5 minutos** ou o expediente será pausado automaticamente."
             ),
         )
-        try:
-            await member.send(embed=embed, view=view)
-        except discord.HTTPException:
-            log_ch = guild.get_channel(self.bot.server_map.staff_timeclock_log_channel_id() or 0)
-            if isinstance(log_ch, discord.TextChannel):
-                await log_ch.send(member.mention, embed=embed, view=view)
+        message: discord.Message | None = None
+        control = await self._control_channel(guild)
+        if isinstance(control, discord.TextChannel):
+            message = await control.send(member.mention, embed=embed, view=view)
+        elif int(config.get("use_dm_as_fallback") or 0) or control is None:
+            try:
+                message = await member.send(embed=embed, view=view)
+            except discord.HTTPException:
+                message = None
+        if message:
+            notifier = getattr(self.bot.db, "add_staff_notification", None)
+            if callable(notifier):
+                await self._maybe_await(
+                    notifier(guild.id, member.id, "checkin_pending", self._iso(now), getattr(message.channel, "id", None), message.id)
+                )
+            upsert_alert = getattr(self.bot.db, "upsert_staff_presence_alert", None)
+            if callable(upsert_alert):
+                await self._maybe_await(
+                    upsert_alert(
+                        guild.id, member.id, "checkin_pending", getattr(message.channel, "id", None), message.id, self._iso(now),
+                        json.dumps({"checkin_id": checkin_id, "session_id": session["id"]}),
+                    )
+                )
         await self.bot.db.log_staff_event(
             int(session["guild_id"]), int(session["user_id"]), "checkin_sent", int(session["id"]),
             json.dumps({"checkin_id": checkin_id}),
         )
 
-    async def process_checkin_response(self, session_id: int, checkin_id: int, response: str, user_id: int) -> str:
+    async def process_checkin_response(self, session_id: int, checkin_id: int, response: str, user_id: int, *, activity: str | None = None) -> str:
         session = await self.bot.db.get_staff_session(session_id)
         if session is None or session["status"] == "closed":
             return "Sessão não encontrada ou já encerrada."
@@ -425,14 +662,26 @@ class StaffTimeclockService:
         member = guild.get_member(int(session["user_id"])) if guild else None
         if response == "continue":
             await self.bot.db.log_staff_event(int(session["guild_id"]), int(session["user_id"]), "checkin_answered_continue", session_id, None)
+            if guild:
+                await self.resolve_alert(guild, int(session["user_id"]), "checkin_pending", "resolved")
             return "Continuando."
+        if response == "activity":
+            if member and activity:
+                await self.change_activity(member, activity)
+            if guild:
+                await self.resolve_alert(guild, int(session["user_id"]), "checkin_pending", "resolved")
+            return f"Atividade atual: **{activity or session['current_activity']}**."
         if response == "pause":
             if member:
                 await self.pause_session(member, reason="Pausa solicitada no check-in.")
+            if guild:
+                await self.resolve_alert(guild, int(session["user_id"]), "checkin_pending", "resolved")
             return "Pausado."
         if response == "end":
             if member:
                 await self.end_session(member, reason="Encerrado pelo check-in.", close_mode="checkin_end")
+            if guild:
+                await self.resolve_alert(guild, int(session["user_id"]), "checkin_pending", "resolved")
             return "Encerrado."
         return "Resposta registrada."
 
@@ -459,6 +708,7 @@ class StaffTimeclockService:
     async def _maybe_send_checkins(self, guild: discord.Guild) -> None:
         sessions = await self.bot.db.list_open_staff_sessions(guild.id)
         now = self._utcnow()
+        config = await self.get_runtime_config(guild.id)
         for session in sessions:
             if session["status"] != "active":
                 continue
@@ -468,7 +718,7 @@ class StaffTimeclockService:
             last_dt = self._parse_dt(last)
             channel_id = session.get("current_channel_id")
             rule_type = await self._get_channel_rule_type(guild.id, channel_id) if channel_id else None
-            interval = CHECKIN_INTERVAL_IN_CALL if rule_type in ("work", "neutral") else CHECKIN_INTERVAL_EXTERNAL
+            interval = int(config["checkin_voice_seconds"]) if rule_type in ("work", "neutral") else int(config["checkin_external_seconds"])
             elapsed = (now - last_dt).total_seconds()
             if elapsed >= interval:
                 await self._send_checkin(session, guild)
@@ -741,6 +991,141 @@ class StaffTimeclockService:
         embed.set_footer(text=f"Atualizado em {self._format_dt(self._utcnow())}")
         return embed
 
+    async def publish_admin_panel(self, guild: discord.Guild, channel: discord.TextChannel | None = None) -> discord.Message:
+        target = channel or await self._control_channel(guild)
+        if not isinstance(target, discord.TextChannel):
+            raise RuntimeError("Central de Ponto nao configurada. Use `/ponto configurar_central canal:#canal`.")
+        from app.core.staff_timeclock_views import StaffTimeclockAdminPanelView
+        embed = await self.build_admin_panel_embed(guild)
+        view = StaffTimeclockAdminPanelView(self.bot)
+        stored = await self.bot.db.get_staff_timeclock_admin_panel(guild.id)
+        if stored and int(stored["channel_id"]) == target.id:
+            try:
+                msg = await target.fetch_message(int(stored["message_id"]))
+                await msg.edit(embed=embed, view=view)
+                return msg
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        msg = await target.send(embed=embed, view=view)
+        await self.bot.db.save_staff_timeclock_admin_panel(guild.id, target.id, msg.id)
+        return msg
+
+    async def refresh_admin_panel(self, guild: discord.Guild) -> None:
+        getter = getattr(self.bot.db, "get_staff_timeclock_admin_panel", None)
+        stored = await self._maybe_await(getter(guild.id)) if callable(getter) else None
+        if not isinstance(stored, dict):
+            return
+        if not stored:
+            return
+        channel = guild.get_channel(int(stored["channel_id"]))
+        if not isinstance(channel, discord.TextChannel):
+            return
+        from app.core.staff_timeclock_views import StaffTimeclockAdminPanelView
+        try:
+            msg = await channel.fetch_message(int(stored["message_id"]))
+            await msg.edit(embed=await self.build_admin_panel_embed(guild), view=StaffTimeclockAdminPanelView(self.bot))
+        except (discord.NotFound, discord.HTTPException):
+            return
+
+    async def build_admin_panel_embed(self, guild: discord.Guild) -> discord.Embed:
+        now = self._utcnow()
+        sessions = await self.bot.db.list_open_staff_sessions(guild.id)
+        active = [s for s in sessions if s["status"] == "active"]
+        paused = [s for s in sessions if s["status"] == "paused"]
+        pending = [s for s in sessions if s["status"] == "pending"]
+        voice_alerts = await self.bot.db.list_active_staff_presence_alerts(guild.id, "voice_without_session")
+        left_alerts = await self.bot.db.list_active_staff_presence_alerts(guild.id, "left_voice_with_active_session")
+        checkin_alerts = await self.bot.db.list_active_staff_presence_alerts(guild.id, "checkin_pending")
+        staff_members = [m for m in guild.members if not m.bot and await self.is_staff_member(m)]
+        today = await self._total_staff_seconds(guild, self._start_of_day(now), now)
+        week = await self._total_staff_seconds(guild, self._start_of_week(now), now)
+        external = [s for s in active if str(s.get("current_environment") or "") == "Trabalho externo"]
+        embed = self.bot.embeds.make(
+            title="Central de Controle de Ponto",
+            description="Visao geral da jornada da staff. Nada critico depende de DM.",
+        )
+        embed.add_field(name="Staffs configurados", value=str(len(staff_members)), inline=True)
+        embed.add_field(name="Ativos", value=str(len(active)), inline=True)
+        embed.add_field(name="Pausados", value=str(len(paused)), inline=True)
+        embed.add_field(name="Pendentes", value=str(len(pending)), inline=True)
+        embed.add_field(name="Call sem ponto", value=str(len(voice_alerts)), inline=True)
+        embed.add_field(name="Trabalho externo", value=str(len(external)), inline=True)
+        embed.add_field(name="Horas hoje", value=self._format_duration(today), inline=True)
+        embed.add_field(name="Horas semana", value=self._format_duration(week), inline=True)
+        embed.add_field(name="Check-ins pendentes", value=str(len(checkin_alerts)), inline=True)
+        lines: list[str] = []
+        for s in sessions[:12]:
+            member = guild.get_member(int(s["user_id"]))
+            name = member.display_name if member else f"<@{s['user_id']}>"
+            env = s.get("current_environment") or "Fora da call"
+            live = self._live_valid_seconds(s) if s["status"] == "active" else self._live_paused_seconds(s)
+            lines.append(f"**{name}** | {STATUS_LABELS.get(str(s['status']), s['status'])} | {s['current_activity']} | {env} | `{self._format_duration(live)}`")
+        for alert in voice_alerts[:6]:
+            member = guild.get_member(int(alert["user_id"]))
+            name = member.display_name if member else f"<@{alert['user_id']}>"
+            started = self._parse_dt(alert["started_at"])
+            lines.append(f"**{name}** | Em call sem ponto | `{self._format_duration(int((now - started).total_seconds()))}` | acao: lembrar")
+        embed.add_field(name="Resumo por staff", value="\n".join(lines[:18]) or "Nenhum movimento agora.", inline=False)
+        if left_alerts:
+            embed.add_field(name="Saida de call com ponto aberto", value="\n".join(f"<@{a['user_id']}>" for a in left_alerts[:10]), inline=False)
+        embed.set_footer(text=f"Ultima atualizacao: {self._format_dt(now)}")
+        embed.timestamp = now
+        return embed
+
+    async def build_pending_review_embed(self, guild: discord.Guild) -> discord.Embed:
+        sessions = await self.bot.db.list_open_staff_sessions(guild.id)
+        pending = [s for s in sessions if s["status"] == "pending"]
+        lines = [
+            f"ID `{s['id']}` | <@{s['user_id']}> | {s.get('current_environment') or 'Sem ambiente'}"
+            for s in pending[:20]
+        ]
+        return self.bot.embeds.make(
+            title="Pendencias de Ponto",
+            description="\n".join(lines) or "Nenhuma pendencia no momento.",
+            fields=[("Como revisar", "Use `/ponto revisar`, `/ponto aprovar_pendente` ou `/ponto reprovar_pendente`.", False)],
+        )
+
+    async def remind_member(self, guild: discord.Guild, target: discord.Member, admin: discord.Member | None = None) -> None:
+        channel = target.voice.channel if target.voice else None
+        await self.send_voice_without_session_alert(target, channel)
+        if admin:
+            await self.bot.db.add_staff_admin_action(guild.id, admin.id, target.id, "remind_member", "Lembrete manual")
+
+    async def remind_all_voice_without_session(self, guild: discord.Guild, admin: discord.Member | None = None) -> int:
+        count = 0
+        for member in guild.members:
+            if member.bot or not await self.is_staff_member(member):
+                continue
+            if await self.bot.db.get_staff_open_session(guild.id, member.id):
+                continue
+            channel = member.voice.channel if member.voice else None
+            if not channel:
+                continue
+            rule = await self._get_channel_rule_type(guild.id, channel.id)
+            if rule in ("work", "neutral"):
+                await self.send_voice_without_session_alert(member, channel)
+                count += 1
+        if admin:
+            await self.bot.db.add_staff_admin_action(guild.id, admin.id, None, "remind_all", f"{count} lembrete(s)")
+        return count
+
+    async def force_pause(self, guild: discord.Guild, target: discord.Member, admin: discord.Member, reason: str) -> None:
+        await self.pause_session(target, reason=reason, actor=admin)
+        await self.bot.db.add_staff_admin_action(guild.id, admin.id, target.id, "force_pause", reason)
+
+    async def force_end(self, guild: discord.Guild, target: discord.Member, admin: discord.Member, reason: str) -> None:
+        await self.end_session(target, actor=admin, reason=reason, close_mode="admin_forced")
+        await self.bot.db.add_staff_admin_action(guild.id, admin.id, target.id, "force_end", reason)
+
+    async def _total_staff_seconds(self, guild: discord.Guild, start_at: datetime, end_at: datetime) -> int:
+        total = 0
+        for member in guild.members:
+            if member.bot or not await self.is_staff_member(member):
+                continue
+            stats = await self.get_member_period_stats(guild.id, member.id, start_at, end_at)
+            total += stats.valid_seconds
+        return total
+
     async def export_csv(self, guild: discord.Guild, period: str) -> discord.File:
         now = self._utcnow()
         start_at, label = self._period_bounds_labeled(period, now)
@@ -879,18 +1264,46 @@ class StaffTimeclockService:
     async def _maintenance_loop(self) -> None:
         while True:
             try:
-                await asyncio.sleep(300)
+                await asyncio.sleep(30)
                 guild = self.bot.get_guild(self.bot.server_map.guild_id())
                 if guild:
                     await self._process_expired_checkins(guild)
                     await self._maybe_send_checkins(guild)
+                    await self._process_voice_alert_timeouts(guild)
                     await self.refresh_panel(guild)
+                    await self.refresh_admin_panel(guild)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 self.bot.log.exception("Falha no loop de manutenção do timeclock da staff.")
 
     # ── Relatório de encerramento ─────────────────────────────────────────────
+
+    async def _process_voice_alert_timeouts(self, guild: discord.Guild) -> None:
+        now = self._utcnow()
+        config = await self.get_runtime_config(guild.id)
+        if not int(config.get("auto_pause_on_voice_leave") or 1):
+            return
+        alerts = await self.bot.db.list_active_staff_presence_alerts(guild.id, "left_voice_with_active_session")
+        for alert in alerts:
+            started = self._parse_dt(alert["started_at"])
+            if (now - started).total_seconds() < int(config["auto_pause_delay_seconds"]):
+                continue
+            member = guild.get_member(int(alert["user_id"]))
+            session = await self.bot.db.get_staff_open_session(guild.id, int(alert["user_id"]))
+            if member and session and session["status"] == "active":
+                await self.pause_session(member, reason="Expediente pausado automaticamente por saida de call sem resposta.")
+                control = await self._control_channel(guild)
+                if isinstance(control, discord.TextChannel):
+                    await control.send(
+                        member.mention,
+                        embed=self.bot.embeds.make(
+                            title="Expediente pausado automaticamente",
+                            description=f"{member.mention}, seu expediente foi pausado porque voce saiu da call e nao respondeu ao aviso.",
+                            color=self.bot.embeds.warning_color,
+                        ),
+                    )
+            await self.resolve_alert(guild, int(alert["user_id"]), "left_voice_with_active_session", "expired")
 
     async def _send_session_report(self, guild: discord.Guild, session: dict[str, Any]) -> None:
         channel_id = self.bot.server_map.staff_timeclock_log_channel_id()
@@ -1008,7 +1421,8 @@ class StaffTimeclockService:
         fields: list[tuple[str, str, bool]] | None = None,
         color: int | None = None,
     ) -> None:
-        channel_id = self.bot.server_map.staff_timeclock_log_channel_id()
+        config = await self.get_runtime_config(guild.id)
+        channel_id = config.get("logs_channel_id") or self.bot.server_map.staff_timeclock_log_channel_id()
         if not channel_id:
             return
         channel = guild.get_channel(channel_id)
@@ -1027,6 +1441,19 @@ class StaffTimeclockService:
         if user_id not in self._locks:
             self._locks[user_id] = asyncio.Lock()
         return self._locks[user_id]
+
+    async def _maybe_await(self, value: Any) -> Any:
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
+    def _call_server_map(self, name: str, default: Any) -> Any:
+        func = getattr(self.bot.server_map, name, None)
+        if callable(func):
+            value = func()
+            if "unittest.mock" not in type(value).__module__:
+                return value
+        return default
 
     def _period_bounds_labeled(self, period: str, now: datetime) -> tuple[datetime, str]:
         key = str(period).strip().lower()

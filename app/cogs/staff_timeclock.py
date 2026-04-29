@@ -310,6 +310,7 @@ class StaffTimeclockCog(
         interaction: discord.Interaction,
         canal: discord.VoiceChannel,
         tipo: str,
+        atividade_sugerida: str | None = None,
     ) -> None:
         if not self.svc.has_manage_permission(interaction.user):
             raise app_commands.CheckFailure("Apenas administração pode configurar canais.")
@@ -319,12 +320,19 @@ class StaffTimeclockCog(
                 ephemeral=True,
             )
             return
+        if atividade_sugerida and atividade_sugerida not in ACTIVITIES:
+            await interaction.response.send_message(
+                embed=self.bot.embeds.error("Atividade invalida", f"Use uma atividade valida: {', '.join(ACTIVITIES)}"),
+                ephemeral=True,
+            )
+            return
         await interaction.response.defer(ephemeral=True)
-        await self.bot.db.set_channel_rule(interaction.guild.id, canal.id, tipo)
+        await self.bot.db.set_channel_rule_v3(interaction.guild.id, canal.id, tipo, atividade_sugerida)
         await interaction.followup.send(
             embed=self.bot.embeds.success(
                 "Canal Configurado",
-                f"{canal.mention} configurado como: **{CHANNEL_RULE_LABELS[tipo]}**",
+                f"{canal.mention} configurado como: **{CHANNEL_RULE_LABELS[tipo]}**"
+                + (f"\nAtividade sugerida: **{atividade_sugerida}**" if atividade_sugerida else ""),
             ),
             ephemeral=True,
         )
@@ -332,6 +340,10 @@ class StaffTimeclockCog(
     @cmd_configurar_canal.autocomplete("tipo")
     async def canal_tipo_autocomplete(self, _: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         return [app_commands.Choice(name=label, value=key) for key, label in CHANNEL_RULE_LABELS.items() if current.lower() in label.lower()]
+
+    @cmd_configurar_canal.autocomplete("atividade_sugerida")
+    async def canal_activity_autocomplete(self, _: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        return [app_commands.Choice(name=a, value=a) for a in ACTIVITIES if current.lower() in a.lower()][:25]
 
     # ── /ponto remover_canal ───────────────────────────────────────────────────
 
@@ -423,6 +435,99 @@ class StaffTimeclockCog(
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # ── Error handler ──────────────────────────────────────────────────────────
+
+    @app_commands.command(name="admin", description="Mostra o painel administrativo geral do ponto")
+    @app_commands.guild_only()
+    async def cmd_admin(self, interaction: discord.Interaction) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode acessar o painel admin.")
+        await interaction.response.defer(ephemeral=True)
+        msg = await self.svc.publish_admin_panel(interaction.guild)
+        await interaction.followup.send(
+            embed=self.bot.embeds.success("Painel Admin Publicado", f"Painel administrativo atualizado em {msg.channel.mention}."),
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="configurar_central", description="Define o canal da Central de Ponto da Staff")
+    @app_commands.guild_only()
+    async def cmd_configurar_central(self, interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas administracao pode configurar a central.")
+        await interaction.response.defer(ephemeral=True)
+        await self.svc.configure_control_channel(interaction.guild, canal)
+        await interaction.followup.send(embed=self.bot.embeds.success("Central Configurada", f"A Central de Ponto da Staff agora e {canal.mention}."), ephemeral=True)
+
+    @app_commands.command(name="configurar_logs", description="Define o canal de logs administrativos do ponto")
+    @app_commands.guild_only()
+    async def cmd_configurar_logs(self, interaction: discord.Interaction, canal: discord.TextChannel) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas administracao pode configurar logs.")
+        await interaction.response.defer(ephemeral=True)
+        await self.svc.configure_logs_channel(interaction.guild, canal)
+        await interaction.followup.send(embed=self.bot.embeds.success("Logs Configurados", f"Os logs administrativos do ponto agora vao para {canal.mention}."), ephemeral=True)
+
+    @app_commands.command(name="lembrar", description="Envia lembrete de ponto para uma staff")
+    @app_commands.guild_only()
+    async def cmd_lembrar(self, interaction: discord.Interaction, usuario: discord.Member) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode enviar lembretes.")
+        await interaction.response.defer(ephemeral=True)
+        await self.svc.remind_member(interaction.guild, usuario, interaction.user)
+        await interaction.followup.send(embed=self.bot.embeds.success("Lembrete Enviado", f"Lembrete enviado para {usuario.mention} na Central de Ponto."), ephemeral=True)
+
+    @app_commands.command(name="lembrar_todos", description="Lembra todos em call valida sem expediente ativo")
+    @app_commands.guild_only()
+    async def cmd_lembrar_todos(self, interaction: discord.Interaction) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode enviar lembretes.")
+        await interaction.response.defer(ephemeral=True)
+        count = await self.svc.remind_all_voice_without_session(interaction.guild, interaction.user)
+        await interaction.followup.send(embed=self.bot.embeds.success("Lembretes Enviados", f"{count} staff(s) lembrado(s)."), ephemeral=True)
+
+    @app_commands.command(name="forcar_pausa", description="Pausa o expediente de uma staff com motivo obrigatorio")
+    @app_commands.guild_only()
+    async def cmd_forcar_pausa(self, interaction: discord.Interaction, usuario: discord.Member, motivo: str) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode forcar pausa.")
+        await interaction.response.defer(ephemeral=True)
+        await self.svc.force_pause(interaction.guild, usuario, interaction.user, motivo)
+        await interaction.followup.send(embed=self.bot.embeds.success("Expediente Pausado", f"Expediente de {usuario.mention} pausado.\nMotivo: {motivo}"), ephemeral=True)
+
+    @app_commands.command(name="forcar_encerrar", description="Encerra o expediente de uma staff com motivo obrigatorio")
+    @app_commands.guild_only()
+    async def cmd_forcar_encerrar(self, interaction: discord.Interaction, usuario: discord.Member, motivo: str) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode forcar encerramento.")
+        await interaction.response.defer(ephemeral=True)
+        await self.svc.force_end(interaction.guild, usuario, interaction.user, motivo)
+        await interaction.followup.send(embed=self.bot.embeds.success("Expediente Encerrado", f"Expediente de {usuario.mention} encerrado.\nMotivo: {motivo}"), ephemeral=True)
+
+    @app_commands.command(name="revisar_pendentes", description="Mostra sessoes pendentes de revisao")
+    @app_commands.guild_only()
+    async def cmd_revisar_pendentes(self, interaction: discord.Interaction) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode revisar pendencias.")
+        await interaction.response.defer(ephemeral=True)
+        embed = await self.svc.build_pending_review_embed(interaction.guild)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="aprovar_pendente", description="Aprova uma sessao pendente")
+    @app_commands.guild_only()
+    async def cmd_aprovar_pendente(self, interaction: discord.Interaction, session_id: int, observacao: str | None = None) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode revisar pendencias.")
+        await interaction.response.defer(ephemeral=True)
+        result = await self.svc.review_pending_session(interaction.guild, session_id, interaction.user, "approve", observacao)
+        await interaction.followup.send(embed=self.bot.embeds.success("Pendente Aprovado", result), ephemeral=True)
+
+    @app_commands.command(name="reprovar_pendente", description="Reprova/invalida uma sessao pendente")
+    @app_commands.guild_only()
+    async def cmd_reprovar_pendente(self, interaction: discord.Interaction, session_id: int, observacao: str | None = None) -> None:
+        if not self.svc.has_manage_permission(interaction.user):
+            raise app_commands.CheckFailure("Apenas lideranca pode revisar pendencias.")
+        await interaction.response.defer(ephemeral=True)
+        result = await self.svc.review_pending_session(interaction.guild, session_id, interaction.user, "invalidate", observacao)
+        await interaction.followup.send(embed=self.bot.embeds.success("Pendente Reprovado", result), ephemeral=True)
 
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         root = getattr(error, "original", error)
