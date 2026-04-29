@@ -25,13 +25,13 @@ from app.services.staff_timeclock_service import StaffTimeclockService
 from app.services.tickets import TicketService
 
 
+TIMECLOCK_SYSTEMS_ENABLED = False
+
 COGS = [
     "app.cogs.administration",
     "app.cogs.beta_program",
     "app.cogs.registration",
     "app.cogs.member_registration",
-    "app.cogs.points",
-    "app.cogs.staff_timeclock",
     "app.cogs.announcements",
     "app.cogs.tickets",
 ]
@@ -94,7 +94,7 @@ class DrakoriaBot(commands.Bot):
                 self.embeds.guild_icon_url = guild.icon.url
                 if not self.embeds.default_thumbnail:
                     self.embeds.default_thumbnail = guild.icon.url
-        if not self._voice_point_runtime_ready:
+        if TIMECLOCK_SYSTEMS_ENABLED and not self._voice_point_runtime_ready:
             self._voice_point_runtime_ready = True
             await self.point_service.bootstrap_runtime()
             await self.staff_timeclock_service.bootstrap()
@@ -145,10 +145,14 @@ class DrakoriaBot(commands.Bot):
         before: discord.VoiceState,
         after: discord.VoiceState,
     ) -> None:
+        if not TIMECLOCK_SYSTEMS_ENABLED:
+            return
         await self.point_service.handle_voice_state_update(member, before, after)
         await self.staff_timeclock_service.handle_voice_state_update(member, before, after)
 
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        if not TIMECLOCK_SYSTEMS_ENABLED:
+            return
         await self.point_service.handle_member_update(before, after)
         await self.staff_timeclock_service.handle_member_update(before, after)
 
@@ -231,5 +235,3 @@ def build_bot() -> DrakoriaBot:
     configure_logging(settings.log_level)
     config = ConfigManager(settings.config_path).load()
     return DrakoriaBot(settings, config)
-
-
