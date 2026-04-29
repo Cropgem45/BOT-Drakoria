@@ -300,3 +300,36 @@ class ServerMap:
     def management_dashboard_show_alerts(self) -> bool:
         return bool(self.management_dashboard().get("show_alerts", True))
 
+    def staff_timeclock(self) -> dict[str, Any]:
+        return self.config.get("staff_timeclock", {})
+
+    def staff_timeclock_enabled(self) -> bool:
+        return bool(self.staff_timeclock().get("enabled", True))
+
+    def staff_timeclock_panel_channel_id(self) -> int | None:
+        raw = self.staff_timeclock().get("panel_channel_id")
+        if raw in (None, "", 0):
+            return self.voice_point_panel_channel_id()
+        return int(raw)
+
+    def staff_timeclock_log_channel_id(self) -> int | None:
+        raw = self.staff_timeclock().get("log_channel_id")
+        if raw in (None, "", 0):
+            return self.voice_point_log_channel_id()
+        return int(raw)
+
+    def staff_timeclock_checkin_interval_in_call(self) -> int:
+        return int(self.staff_timeclock().get("checkin_interval_in_call_seconds", 3600))
+
+    def staff_timeclock_checkin_interval_external(self) -> int:
+        return int(self.staff_timeclock().get("checkin_interval_external_seconds", 1800))
+
+    def staff_timeclock_checkin_timeout(self) -> int:
+        return int(self.staff_timeclock().get("checkin_timeout_seconds", 300))
+
+    def staff_timeclock_max_session_hours(self) -> int:
+        return int(self.staff_timeclock().get("max_session_hours", 12))
+
+    def staff_timeclock_manage_role_ids(self) -> list[int]:
+        return [int(rid) for rid in self.staff_timeclock().get("manage_timeclock_role_ids", [])]
+

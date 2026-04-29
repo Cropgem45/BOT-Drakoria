@@ -375,9 +375,148 @@ class Database:
                 ON tickets (guild_id, resolved_staff_id, closed_at DESC)
                 """
             )
+            await self._migrate_staff_timeclock_schema(conn)
             await conn.commit()
         finally:
             await conn.close()
+
+    async def _migrate_staff_timeclock_schema(self, conn: aiosqlite.Connection) -> None:
+        tables = await self.fetchall(
+            conn, "SELECT name FROM sqlite_master WHERE type='table'", ()
+        )
+        existing = {str(row["name"]) for row in tables}
+        if "staff_roles_config" not in existing:
+            await conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS staff_roles_config (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER NOT NULL,
+                    role_id INTEGER NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (guild_id, role_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_voice_channel_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER NOT NULL,
+                    channel_id INTEGER NOT NULL,
+                    rule_type TEXT NOT NULL DEFAULT 'work',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (guild_id, channel_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_work_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    close_reason TEXT,
+                    close_mode TEXT,
+                    ended_by_user_id INTEGER,
+                    current_activity TEXT NOT NULL DEFAULT 'Não classificado',
+                    current_environment TEXT,
+                    current_channel_id INTEGER,
+                    segment_started_at TEXT,
+                    pause_started_at TEXT,
+                    active_pause_id INTEGER,
+                    total_valid_seconds INTEGER NOT NULL DEFAULT 0,
+                    total_paused_seconds INTEGER NOT NULL DEFAULT 0,
+                    total_pending_seconds INTEGER NOT NULL DEFAULT 0,
+                    last_checkin_at TEXT,
+                    checkin_pending INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_work_segments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES staff_work_sessions(id),
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    activity TEXT NOT NULL DEFAULT 'Não classificado',
+                    environment TEXT,
+                    channel_id INTEGER,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    duration_seconds INTEGER,
+                    segment_status TEXT NOT NULL DEFAULT 'valid',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_work_pauses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES staff_work_sessions(id),
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    duration_seconds INTEGER,
+                    reason TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_work_checkins (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES staff_work_sessions(id),
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    sent_at TEXT NOT NULL,
+                    deadline_at TEXT NOT NULL,
+                    answered_at TEXT,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    response TEXT,
+                    message_id INTEGER,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_work_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    session_id INTEGER,
+                    admin_id INTEGER NOT NULL,
+                    adjustment_seconds INTEGER NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_work_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    session_id INTEGER,
+                    event_type TEXT NOT NULL,
+                    metadata_json TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS staff_timeclock_panel_state (
+                    guild_id INTEGER PRIMARY KEY,
+                    channel_id INTEGER NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_staff_work_sessions_guild_user
+                ON staff_work_sessions (guild_id, user_id, id DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_staff_work_sessions_status
+                ON staff_work_sessions (guild_id, status, started_at DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_staff_work_segments_session
+                ON staff_work_segments (session_id, started_at);
+
+                CREATE INDEX IF NOT EXISTS idx_staff_work_segments_guild_user
+                ON staff_work_segments (guild_id, user_id, started_at DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_staff_work_events_guild
+                ON staff_work_events (guild_id, created_at DESC);
+                """
+            )
 
     async def _table_columns(self, conn: aiosqlite.Connection, table_name: str) -> set[str]:
         rows = await self.fetchall(conn, f"PRAGMA table_info({table_name})", ())
@@ -1776,4 +1915,345 @@ class Database:
         finally:
             await conn.close()
         return [dict(row) for row in rows]
+
+    # ── Staff Timeclock ─────────────────────────────────────────────────────────
+
+    async def get_staff_roles(self, guild_id: int) -> list[dict[str, Any]]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(conn, "SELECT * FROM staff_roles_config WHERE guild_id = ? ORDER BY id ASC", (guild_id,))
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def add_staff_role(self, guild_id: int, role_id: int) -> None:
+        await self._run_write(
+            "INSERT OR IGNORE INTO staff_roles_config (guild_id, role_id) VALUES (?, ?)",
+            (guild_id, role_id),
+        )
+
+    async def remove_staff_role(self, guild_id: int, role_id: int) -> None:
+        await self._run_write(
+            "DELETE FROM staff_roles_config WHERE guild_id = ? AND role_id = ?",
+            (guild_id, role_id),
+        )
+
+    async def get_channel_rule(self, guild_id: int, channel_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                "SELECT * FROM staff_voice_channel_rules WHERE guild_id = ? AND channel_id = ?",
+                (guild_id, channel_id),
+            )
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def set_channel_rule(self, guild_id: int, channel_id: int, rule_type: str) -> None:
+        await self._run_write(
+            """
+            INSERT INTO staff_voice_channel_rules (guild_id, channel_id, rule_type, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id, channel_id) DO UPDATE SET rule_type = excluded.rule_type, updated_at = excluded.updated_at
+            """,
+            (guild_id, channel_id, rule_type),
+        )
+
+    async def remove_channel_rule(self, guild_id: int, channel_id: int) -> None:
+        await self._run_write(
+            "DELETE FROM staff_voice_channel_rules WHERE guild_id = ? AND channel_id = ?",
+            (guild_id, channel_id),
+        )
+
+    async def get_all_channel_rules(self, guild_id: int) -> list[dict[str, Any]]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(
+                conn,
+                "SELECT * FROM staff_voice_channel_rules WHERE guild_id = ? ORDER BY id ASC",
+                (guild_id,),
+            )
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def create_staff_session(
+        self,
+        guild_id: int,
+        user_id: int,
+        started_at: str,
+        activity: str = "Não classificado",
+        environment: str | None = None,
+        channel_id: int | None = None,
+        notes: str | None = None,
+    ) -> int:
+        conn = await self.connect()
+        try:
+            await conn.execute(
+                """
+                INSERT INTO staff_work_sessions (
+                    guild_id, user_id, status, started_at,
+                    current_activity, current_environment, current_channel_id,
+                    segment_started_at, notes, updated_at
+                ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (guild_id, user_id, started_at, activity, environment, channel_id, started_at, notes, started_at),
+            )
+            await conn.commit()
+            row = await self.fetchone(
+                conn,
+                "SELECT id FROM staff_work_sessions WHERE guild_id = ? AND user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1",
+                (guild_id, user_id),
+            )
+        finally:
+            await conn.close()
+        return int(row["id"])
+
+    async def get_staff_open_session(self, guild_id: int, user_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                "SELECT * FROM staff_work_sessions WHERE guild_id = ? AND user_id = ? AND status IN ('active','paused','pending') ORDER BY id DESC LIMIT 1",
+                (guild_id, user_id),
+            )
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def get_staff_session(self, session_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(conn, "SELECT * FROM staff_work_sessions WHERE id = ?", (session_id,))
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def list_open_staff_sessions(self, guild_id: int) -> list[dict[str, Any]]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(
+                conn,
+                "SELECT * FROM staff_work_sessions WHERE guild_id = ? AND status IN ('active','paused','pending') ORDER BY started_at ASC",
+                (guild_id,),
+            )
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def update_staff_session(self, session_id: int, fields: dict[str, Any]) -> None:
+        if not fields:
+            return
+        columns = ", ".join(f"{col} = ?" for col in fields)
+        params = tuple(fields.values()) + (session_id,)
+        await self._run_write(f"UPDATE staff_work_sessions SET {columns} WHERE id = ?", params)
+
+    async def add_staff_segment(
+        self,
+        session_id: int,
+        guild_id: int,
+        user_id: int,
+        activity: str,
+        started_at: str,
+        environment: str | None = None,
+        channel_id: int | None = None,
+    ) -> int:
+        conn = await self.connect()
+        try:
+            await conn.execute(
+                """
+                INSERT INTO staff_work_segments (session_id, guild_id, user_id, activity, environment, channel_id, started_at, segment_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'valid')
+                """,
+                (session_id, guild_id, user_id, activity, environment, channel_id, started_at),
+            )
+            await conn.commit()
+            row = await self.fetchone(conn, "SELECT id FROM staff_work_segments WHERE session_id = ? ORDER BY id DESC LIMIT 1", (session_id,))
+        finally:
+            await conn.close()
+        return int(row["id"])
+
+    async def close_staff_segment(self, segment_id: int, ended_at: str, duration_seconds: int) -> None:
+        await self._run_write(
+            "UPDATE staff_work_segments SET ended_at = ?, duration_seconds = ? WHERE id = ?",
+            (ended_at, duration_seconds, segment_id),
+        )
+
+    async def get_session_segments(self, session_id: int) -> list[dict[str, Any]]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(conn, "SELECT * FROM staff_work_segments WHERE session_id = ? ORDER BY started_at ASC", (session_id,))
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def open_staff_pause(
+        self,
+        session_id: int,
+        guild_id: int,
+        user_id: int,
+        started_at: str,
+        reason: str | None = None,
+    ) -> int:
+        conn = await self.connect()
+        try:
+            await conn.execute(
+                "INSERT INTO staff_work_pauses (session_id, guild_id, user_id, started_at, reason) VALUES (?, ?, ?, ?, ?)",
+                (session_id, guild_id, user_id, started_at, reason),
+            )
+            await conn.commit()
+            row = await self.fetchone(conn, "SELECT id FROM staff_work_pauses WHERE session_id = ? ORDER BY id DESC LIMIT 1", (session_id,))
+        finally:
+            await conn.close()
+        return int(row["id"])
+
+    async def close_staff_pause(self, pause_id: int, ended_at: str, duration_seconds: int) -> None:
+        await self._run_write(
+            "UPDATE staff_work_pauses SET ended_at = ?, duration_seconds = ? WHERE id = ?",
+            (ended_at, duration_seconds, pause_id),
+        )
+
+    async def create_staff_checkin(
+        self,
+        session_id: int,
+        guild_id: int,
+        user_id: int,
+        sent_at: str,
+        deadline_at: str,
+        message_id: int | None = None,
+    ) -> int:
+        conn = await self.connect()
+        try:
+            await conn.execute(
+                "INSERT INTO staff_work_checkins (session_id, guild_id, user_id, sent_at, deadline_at, message_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (session_id, guild_id, user_id, sent_at, deadline_at, message_id),
+            )
+            await conn.commit()
+            row = await self.fetchone(conn, "SELECT id FROM staff_work_checkins WHERE session_id = ? ORDER BY id DESC LIMIT 1", (session_id,))
+        finally:
+            await conn.close()
+        return int(row["id"])
+
+    async def update_staff_checkin(self, checkin_id: int, status: str, answered_at: str | None = None, response: str | None = None) -> None:
+        await self._run_write(
+            "UPDATE staff_work_checkins SET status = ?, answered_at = ?, response = ? WHERE id = ?",
+            (status, answered_at, response, checkin_id),
+        )
+
+    async def get_pending_checkin(self, session_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                "SELECT * FROM staff_work_checkins WHERE session_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1",
+                (session_id,),
+            )
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def get_expired_checkins(self, guild_id: int, now_iso: str) -> list[dict[str, Any]]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(
+                conn,
+                "SELECT * FROM staff_work_checkins WHERE guild_id = ? AND status = 'pending' AND deadline_at <= ?",
+                (guild_id, now_iso),
+            )
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def add_staff_adjustment(
+        self,
+        guild_id: int,
+        user_id: int,
+        admin_id: int,
+        adjustment_seconds: int,
+        reason: str,
+        session_id: int | None = None,
+    ) -> None:
+        await self._run_write(
+            "INSERT INTO staff_work_adjustments (guild_id, user_id, admin_id, adjustment_seconds, reason, session_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (guild_id, user_id, admin_id, adjustment_seconds, reason, session_id),
+        )
+
+    async def get_staff_adjustments(self, guild_id: int, user_id: int) -> list[dict[str, Any]]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(conn, "SELECT * FROM staff_work_adjustments WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC", (guild_id, user_id))
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def log_staff_event(self, guild_id: int, user_id: int, event_type: str, session_id: int | None = None, metadata_json: str | None = None) -> None:
+        await self._run_write(
+            "INSERT INTO staff_work_events (guild_id, user_id, event_type, session_id, metadata_json) VALUES (?, ?, ?, ?, ?)",
+            (guild_id, user_id, event_type, session_id, metadata_json),
+        )
+
+    async def get_staff_segments_in_range(
+        self,
+        guild_id: int,
+        start_at: str,
+        end_at: str,
+        *,
+        user_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        where = ["seg.guild_id = ?", "seg.started_at < ?", "COALESCE(seg.ended_at, ?) > ?"]
+        params: list[Any] = [guild_id, end_at, end_at, start_at]
+        if user_id is not None:
+            where.append("seg.user_id = ?")
+            params.append(user_id)
+        query = (
+            "SELECT seg.*, s.status AS session_status FROM staff_work_segments seg "
+            "JOIN staff_work_sessions s ON s.id = seg.session_id "
+            "WHERE " + " AND ".join(where) + " ORDER BY seg.started_at ASC"
+        )
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(conn, query, tuple(params))
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def get_staff_sessions_in_range(
+        self,
+        guild_id: int,
+        start_at: str,
+        end_at: str,
+        *,
+        user_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        where = ["guild_id = ?", "started_at < ?", "COALESCE(ended_at, ?) > ?"]
+        params: list[Any] = [guild_id, end_at, end_at, start_at]
+        if user_id is not None:
+            where.append("user_id = ?")
+            params.append(user_id)
+        query = "SELECT * FROM staff_work_sessions WHERE " + " AND ".join(where) + " ORDER BY started_at DESC"
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(conn, query, tuple(params))
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def get_staff_timeclock_panel(self, guild_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(conn, "SELECT * FROM staff_timeclock_panel_state WHERE guild_id = ?", (guild_id,))
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def save_staff_timeclock_panel(self, guild_id: int, channel_id: int, message_id: int) -> None:
+        await self._run_write(
+            """
+            INSERT INTO staff_timeclock_panel_state (guild_id, channel_id, message_id, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id, message_id = excluded.message_id, updated_at = excluded.updated_at
+            """,
+            (guild_id, channel_id, message_id),
+        )
 

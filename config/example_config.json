@@ -206,5 +206,19 @@
     "send_dm_on_approval": true,
     "send_dm_on_rejection": true,
     "generate_tester_card": true
+  },
+  "staff_timeclock": {
+    "enabled": true,
+    "panel_channel_id": 1487647499161309285,
+    "log_channel_id": 1487647509559120035,
+    "checkin_interval_in_call_seconds": 3600,
+    "checkin_interval_external_seconds": 1800,
+    "checkin_timeout_seconds": 300,
+    "max_session_hours": 12,
+    "manage_timeclock_role_ids": [
+      1487647336816709868,
+      1487647344479699087,
+      1487647345448325210
+    ]
   }
 }

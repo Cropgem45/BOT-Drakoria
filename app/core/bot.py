@@ -21,6 +21,7 @@ from app.services.beta_program import BetaProgramService
 from app.services.member_registration import MemberRegistrationService
 from app.services.points import PointService
 from app.services.registration import RegistrationService
+from app.services.staff_timeclock_service import StaffTimeclockService
 from app.services.tickets import TicketService
 
 
@@ -30,6 +31,7 @@ COGS = [
     "app.cogs.registration",
     "app.cogs.member_registration",
     "app.cogs.points",
+    "app.cogs.staff_timeclock",
     "app.cogs.announcements",
     "app.cogs.tickets",
 ]
@@ -52,6 +54,7 @@ class DrakoriaBot(commands.Bot):
         self.permission_service = PermissionService(self)
         self.view_factory = ViewFactory(self)
         self.point_service = PointService(self)
+        self.staff_timeclock_service = StaffTimeclockService(self)
         self.registration_service = RegistrationService(self)
         self.member_registration_service = MemberRegistrationService(self)
         self.beta_program_service = BetaProgramService(self)
@@ -94,6 +97,7 @@ class DrakoriaBot(commands.Bot):
         if not self._voice_point_runtime_ready:
             self._voice_point_runtime_ready = True
             await self.point_service.bootstrap_runtime()
+            await self.staff_timeclock_service.bootstrap()
         if guild is not None:
             try:
                 if self.server_map.registration_panel_enabled():
@@ -142,9 +146,11 @@ class DrakoriaBot(commands.Bot):
         after: discord.VoiceState,
     ) -> None:
         await self.point_service.handle_voice_state_update(member, before, after)
+        await self.staff_timeclock_service.handle_voice_state_update(member, before, after)
 
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         await self.point_service.handle_member_update(before, after)
+        await self.staff_timeclock_service.handle_member_update(before, after)
 
     async def _on_tree_error(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
         root_error = getattr(error, "original", error)
