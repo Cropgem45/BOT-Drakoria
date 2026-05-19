@@ -18,6 +18,7 @@ from app.core.views import ViewFactory
 from app.repositories.database import Database
 from app.services.diagnostics import HealthcheckService
 from app.services.beta_program import BetaProgramService
+from app.services.donaters import DonaterService
 from app.services.member_registration import MemberRegistrationService
 from app.services.points import PointService
 from app.services.registration import RegistrationService
@@ -34,6 +35,7 @@ COGS = [
     "app.cogs.member_registration",
     "app.cogs.announcements",
     "app.cogs.tickets",
+    "app.cogs.donaters",
 ]
 
 
@@ -59,6 +61,7 @@ class DrakoriaBot(commands.Bot):
         self.member_registration_service = MemberRegistrationService(self)
         self.beta_program_service = BetaProgramService(self)
         self.ticket_service = TicketService(self)
+        self.donater_service = DonaterService(self)
         self.healthcheck_service = HealthcheckService(self)
         self.registered_persistent_views: dict[str, int] = {}
         self._voice_point_runtime_ready = False
@@ -77,7 +80,12 @@ class DrakoriaBot(commands.Bot):
                 raise
         guild = discord.Object(id=self.server_map.guild_id())
         self.tree.copy_global_to(guild=guild)
-        await self.tree.sync(guild=guild)
+        synced_commands = await self.tree.sync(guild=guild)
+        self.log.info(
+            "Slash commands sincronizados na guild %s: %s",
+            self.server_map.guild_id(),
+            ", ".join(sorted(command.name for command in synced_commands)),
+        )
 
     async def on_ready(self) -> None:
         if self.user:
@@ -114,6 +122,10 @@ class DrakoriaBot(commands.Bot):
                     await self.beta_program_service.publish_panel(guild)
             except Exception:
                 self.log.exception("Falha ao sincronizar painel do programa beta no on_ready.")
+            try:
+                await self.donater_service.bootstrap(guild)
+            except Exception:
+                self.log.exception("Falha ao sincronizar Trono dos Patronos no on_ready.")
 
     async def on_member_join(self, member: discord.Member) -> None:
         if member.guild.id != self.server_map.guild_id():
@@ -158,6 +170,13 @@ class DrakoriaBot(commands.Bot):
 
     async def _on_tree_error(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
         root_error = getattr(error, "original", error)
+        if isinstance(root_error, discord.HTTPException) and getattr(root_error, "code", None) in {40060, 10062}:
+            self.log.warning(
+                "Interacao %s indisponivel no handler global (code=%s); erro ignorado.",
+                interaction.id,
+                getattr(root_error, "code", None),
+            )
+            return
         self.log.exception("Falha em slash command: %s", root_error)
         message = str(root_error) if str(root_error).strip() else "Erro inesperado ao processar o comando."
         embed = self.embeds.error("Falha no comando", message[:1800])

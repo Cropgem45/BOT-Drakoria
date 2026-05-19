@@ -1,0 +1,49 @@
+{
+  "users": {
+    "467809063305084939": {
+      "username": "jeanscottofc",
+      "total": 6,
+      "lastDonation": 6,
+      "history": [
+        {
+          "type": "set",
+          "amount": 6,
+          "delta": 6,
+          "previousTotal": 0,
+          "newTotal": 6,
+          "actorId": "1409302531313762435",
+          "actorName": "Murillo • Nexar Studios",
+          "at": "2026-05-19T16:27:51.174777+00:00"
+        }
+      ],
+      "dateJoined": "2026-05-19T16:27:51.174777+00:00"
+    },
+    "1099094580881797130": {
+      "username": "Padre Santiago",
+      "total": 2.52,
+      "lastDonation": 2.52,
+      "history": [
+        {
+          "type": "set",
+          "amount": 2.52,
+          "delta": 2.52,
+          "previousTotal": 0,
+          "newTotal": 2.52,
+          "actorId": "1409302531313762435",
+          "actorName": "Murillo • Nexar Studios",
+          "at": "2026-05-19T16:28:30.151440+00:00"
+        }
+      ],
+      "dateJoined": "2026-05-19T16:28:30.151440+00:00"
+    }
+  },
+  "meta": {
+    "rankingChannelId": 1506326402763460708,
+    "rankingMessageId": 1506330537873379408,
+    "currentTopId": "467809063305084939",
+    "topSince": "2026-05-19T16:27:51.178275+00:00",
+    "rotationIndex": 12,
+    "lastUpdated": "2026-05-19T16:45:43.595861+00:00",
+    "resetHistory": []
+  }
+}

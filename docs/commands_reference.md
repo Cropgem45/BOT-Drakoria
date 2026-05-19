@@ -26,6 +26,23 @@ Referencia dos comandos ativos no fechamento.
 
 - `anuncio`: abre modal para publicacao de anuncio oficial.
 
+## /adddonate
+
+- `usuario valor`: adiciona uma doacao ao Trono dos Patronos.
+
+## /removedonate
+
+- `usuario valor`: remove valor por correcao administrativa sem permitir total negativo.
+
+## /setdonate
+
+- `usuario valor`: define o total exato de um patrono.
+
+## /top
+
+- `refresh`: sincroniza manualmente a embed fixa do ranking.
+- `reset`: reseta o ranking com confirmacao `CONFIRMAR`.
+
 ## /pontos
 
 - `estado`: estado do expediente de um membro.

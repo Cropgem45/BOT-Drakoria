@@ -1,0 +1,37 @@
+{
+  "users": {
+    "1440325633493303397": {
+      "username": "Kingdragon",
+      "total": 1,
+      "lastDonation": 1,
+      "history": [
+        {
+          "type": "set",
+          "amount": 1,
+          "delta": 1,
+          "previousTotal": 0,
+          "newTotal": 1,
+          "actorId": "714572707576021072",
+          "actorName": "Campos  • Nexar Studios",
+          "at": "2026-05-19T17:07:23.598586+00:00"
+        }
+      ],
+      "dateJoined": "2026-05-19T17:07:23.598586+00:00"
+    }
+  },
+  "meta": {
+    "rankingChannelId": 1506326402763460708,
+    "rankingMessageId": 1506330537873379408,
+    "currentTopId": null,
+    "topSince": null,
+    "rotationIndex": 12,
+    "lastUpdated": "2026-05-19T17:07:23.598586+00:00",
+    "resetHistory": [
+      {
+        "at": "2026-05-19T17:03:41.636336+00:00",
+        "actorId": "1409302531313762435",
+        "actorName": "Murillo • Nexar Studios"
+      }
+    ]
+  }
+}
