@@ -46,7 +46,7 @@ class DonaterService:
             return
         self._bootstrapped = True
         await self.load()
-        await self.refresh(guild, announce=False)
+        await self.refresh(guild, announce=False, create_if_missing=False)
 
     async def load(self) -> dict[str, Any]:
         async with self._lock:
@@ -98,7 +98,13 @@ class DonaterService:
             color=0x8B0000,
         )
 
-    async def refresh(self, guild: discord.Guild, *, announce: bool = False) -> discord.Message:
+    async def refresh(
+        self,
+        guild: discord.Guild,
+        *,
+        announce: bool = False,
+        create_if_missing: bool = True,
+    ) -> discord.Message | None:
         async with self._lock:
             data = await self._data_locked()
             old_top_id = data["meta"].get("currentTopId")
@@ -111,7 +117,7 @@ class DonaterService:
             await self._save_locked()
 
         await self._sync_top_role(guild, old_top_id, new_top_id)
-        message = await self._upsert_ranking_message(guild, embed)
+        message = await self._upsert_ranking_message(guild, embed, create_if_missing=create_if_missing)
         if announce and new_top_id != old_top_id:
             await self._announce_throne_change(guild, old_top_id, new_top_id)
         return message
@@ -262,7 +268,13 @@ class DonaterService:
             throne_changed=current_top_id != previous_top_id,
         )
 
-    async def _upsert_ranking_message(self, guild: discord.Guild, embed: discord.Embed) -> discord.Message:
+    async def _upsert_ranking_message(
+        self,
+        guild: discord.Guild,
+        embed: discord.Embed,
+        *,
+        create_if_missing: bool,
+    ) -> discord.Message | None:
         channel = self._ranking_channel(guild)
         if not channel:
             raise RuntimeError("Canal 💎・top-doadores não encontrado ou inacessível.")
@@ -279,6 +291,17 @@ class DonaterService:
             except (discord.NotFound, discord.Forbidden, discord.HTTPException, ValueError):
                 message = None
         if message is None:
+            if not create_if_missing:
+                await self._log(
+                    guild,
+                    "Ranking de patronos não recriado",
+                    (
+                        "A mensagem fixa do ranking não foi encontrada durante a sincronização automática. "
+                        "Use `/top refresh` para criar uma nova mensagem fixa, se necessário."
+                    ),
+                    color=0xD6A23A,
+                )
+                return None
             message = await channel.send(embed=embed)
             async with self._lock:
                 data = await self._data_locked()

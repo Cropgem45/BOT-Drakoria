@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 
 class TopDonatersCog(commands.Cog):
@@ -10,23 +10,6 @@ class TopDonatersCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-
-    async def cog_load(self) -> None:
-        self.rotate_throne_presence.start()
-
-    async def cog_unload(self) -> None:
-        self.rotate_throne_presence.cancel()
-
-    @tasks.loop(minutes=20)
-    async def rotate_throne_presence(self) -> None:
-        guild = self.bot.get_guild(self.bot.server_map.guild_id())
-        if guild is None:
-            return
-        await self.bot.donater_service.refresh(guild, announce=False)
-
-    @rotate_throne_presence.before_loop
-    async def before_rotate_throne_presence(self) -> None:
-        await self.bot.wait_until_ready()
 
     @app_commands.command(name="adddonate", description="Adiciona uma doação ao Trono dos Patronos")
     @app_commands.guild_only()
@@ -122,7 +105,7 @@ class TopDonatersCog(commands.Cog):
             interaction,
             "Trono Atualizado Manualmente",
             f"{actor.mention} forçou a atualização do ranking de patronos.",
-            [("Mensagem", f"`{message.id}`", True)],
+            [("Mensagem", f"`{message.id}`" if message else "não criada", True)],
         )
         await self._safe_reply(
             interaction,
