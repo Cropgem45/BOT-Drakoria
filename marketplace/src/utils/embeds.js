@@ -29,23 +29,23 @@ function listingEmbed(listing, { closed = false } = {}) {
     ? {
         badge: '🔎 ANUNCIO DE COMPRA',
         title: `COMPRO ${listing.itemName.toUpperCase()}`,
-        intro: 'Um jogador esta procurando este item. Se voce tem, abra uma conversa.',
-        priceLabel: '💰 Pagamento',
-        ownerLabel: '👤 Comprador',
-        actionHint: 'Clique em **Tenho o Item** para negociar com o comprador.',
+        intro: 'Se voce tem o item, abra uma conversa e combine a troca.',
+        priceLabel: 'Pagamento',
+        ownerLabel: 'Comprador',
+        actionHint: 'Clique em **Tenho o Item** para negociar.',
       }
     : {
         badge: '🛒 ANUNCIO DE VENDA',
         title: `VENDO ${listing.itemName.toUpperCase()}`,
         intro: 'Item disponivel para negociacao no Mercado Drakoria.',
-        priceLabel: '💰 Preco',
-        ownerLabel: '👤 Vendedor',
-        actionHint: 'Clique em **Tenho Interesse** para negociar com o vendedor.',
+        priceLabel: 'Preco',
+        ownerLabel: 'Vendedor',
+        actionHint: 'Clique em **Tenho Interesse** para negociar.',
       };
   const title = closed
     ? 'ANUNCIO ENCERRADO'
     : mode.title;
-  const description = listing.description || 'Sem descricao adicional.';
+  const description = (listing.description || '').trim();
 
   const embed = new EmbedBuilder()
     .setColor(closed ? theme.colors.closed : accent)
@@ -55,53 +55,39 @@ function listingEmbed(listing, { closed = false } = {}) {
         ? '⛔ **Este anuncio nao esta mais disponivel.**'
         : [
             `**${mode.badge}**`,
-            mode.intro,
             '',
-            mode.actionHint,
-          ].join('\n'),
+            `💰 **${mode.priceLabel}:** **${listing.price}**`,
+            `👤 **${mode.ownerLabel}:** **${listing.sellerName}**`,
+            '',
+            `📂 **Categoria:** **${category}**`,
+            `⏳ **Tempo:** **${compactTimeLeft(listing.expiresAt)}**`,
+            description ? '' : '',
+            description ? `📝 **Descricao:**\n> ${description.slice(0, 350).replace(/\n/g, '\n> ')}` : '',
+            '',
+            `_${mode.actionHint}_`,
+          ].filter(Boolean).join('\n'),
     )
     .addFields(
-      {
-        name: mode.priceLabel,
-        value: `**${listing.price}**`,
-        inline: true,
-      },
-      {
-        name: mode.ownerLabel,
-        value: `**${listing.sellerName}**`,
-        inline: true,
-      },
-      {
-        name: '📂 Categoria',
-        value: `**${category}**`,
-        inline: true,
-      },
-      {
-        name: '⏳ Tempo restante',
-        value: closed ? '**Encerrado**' : `**${compactTimeLeft(listing.expiresAt)}**`,
-        inline: true,
-      },
-      {
-        name: '📜 Descricao do anuncio',
-        value: [
-          '```md',
-          description.slice(0, 900),
-          '```',
-        ].join('\n'),
-        inline: false,
-      },
+      closed
+        ? []
+        : [
+            {
+              name: 'Atalho',
+              value: isBuying ? '📦 Tenho o Item' : '💬 Tenho Interesse',
+              inline: true,
+            },
+            {
+              name: 'Status',
+              value: '🟢 Ativo',
+              inline: true,
+            },
+          ],
     )
     .setFooter({ text: `${theme.footer} • ${isBuying ? 'Compra' : 'Venda'} segura via Discord` })
     .setTimestamp();
 
   if (listing.imageUrl) {
     embed.setImage(listing.imageUrl);
-  } else {
-    embed.addFields({
-      name: '🖼️ Imagem',
-      value: '*Sem imagem adicionada.*',
-      inline: false,
-    });
   }
 
   return embed;

@@ -1,5 +1,6 @@
 const {
   ChannelType,
+  OverwriteType,
   PermissionFlagsBits,
 } = require('discord.js');
 const { env } = require('../config/env');
@@ -152,6 +153,35 @@ async function createNegotiationChannel(interaction, listing) {
   const channelName = buildNegotiationChannelName(listing.itemName, interaction.user.username);
 
   try {
+    const botMember = await interaction.guild.members.fetchMe();
+    const missingGuildPerms = [];
+    if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels)) missingGuildPerms.push('Gerenciar Canais');
+    if (!botMember.permissions.has(PermissionFlagsBits.ViewChannel)) missingGuildPerms.push('Ver Canais');
+    if (missingGuildPerms.length) {
+      await interaction.reply({
+        content: `Nao consegui criar a conversa privada. Permissoes faltando no bot: ${missingGuildPerms.join(', ')}.`,
+        ephemeral: true,
+      });
+      return null;
+    }
+
+    if (parentId) {
+      const parent = await interaction.guild.channels.fetch(parentId).catch(() => null);
+      if (parent) {
+        const parentPerms = parent.permissionsFor(botMember);
+        const missingParentPerms = [];
+        if (!parentPerms?.has(PermissionFlagsBits.ViewChannel)) missingParentPerms.push('Ver Canal (na categoria)');
+        if (!parentPerms?.has(PermissionFlagsBits.ManageChannels)) missingParentPerms.push('Gerenciar Canais (na categoria)');
+        if (missingParentPerms.length) {
+          await interaction.reply({
+            content: `Nao consegui criar a conversa privada na categoria atual. Permissoes faltando: ${missingParentPerms.join(', ')}.`,
+            ephemeral: true,
+          });
+          return null;
+        }
+      }
+    }
+
     const channel = await interaction.guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
@@ -160,10 +190,12 @@ async function createNegotiationChannel(interaction, listing) {
       permissionOverwrites: [
         {
           id: interaction.guild.roles.everyone.id,
+          type: OverwriteType.Role,
           deny: [PermissionFlagsBits.ViewChannel],
         },
         {
           id: listing.sellerId,
+          type: OverwriteType.Member,
           allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.SendMessages,
@@ -174,6 +206,7 @@ async function createNegotiationChannel(interaction, listing) {
         },
         {
           id: interaction.user.id,
+          type: OverwriteType.Member,
           allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.SendMessages,
@@ -184,6 +217,7 @@ async function createNegotiationChannel(interaction, listing) {
         },
         {
           id: interaction.client.user.id,
+          type: OverwriteType.Member,
           allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.SendMessages,
@@ -211,9 +245,14 @@ async function createNegotiationChannel(interaction, listing) {
 
     return channel;
   } catch (error) {
-    console.error('[Mercado Drakoria] Falha ao criar conversa privada:', error);
+    console.error('[Mercado Drakoria] Falha ao criar conversa privada:', {
+      message: error?.message,
+      code: error?.code,
+      status: error?.status,
+      rawError: error?.rawError,
+    });
     await interaction.reply({
-      content: 'Nao consegui criar a conversa privada. Verifique se o bot tem permissao de Gerenciar Canais.',
+      content: 'Nao consegui criar a conversa privada. Verifique se o bot tem permissao de Gerenciar Canais e acesso a categoria.',
       ephemeral: true,
     });
     return null;
@@ -285,6 +324,7 @@ async function closeListing(interaction, listingId) {
   const closedListing = updateListing(listing.id, (current) => ({
     ...current,
     status: 'closed',
+    closedAt: new Date().toISOString(),
   }));
 
   await editListingAsClosed(interaction.client, closedListing);

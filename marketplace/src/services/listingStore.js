@@ -48,6 +48,7 @@ function createListing(input) {
     status: input.status || 'active',
     createdAt: input.createdAt || now,
     expiresAt: input.expiresAt,
+    closedAt: input.closedAt || null,
   };
   store.listings.push(listing);
   writeStore(store);
@@ -85,10 +86,36 @@ function findExpiredActiveListings(limit = 25) {
     .slice(0, limit);
 }
 
+function findClosableListings(olderThanMs, limit = 50) {
+  const now = Date.now();
+  const store = readStore();
+  return store.listings
+    .filter((listing) => listing.status !== 'active')
+    .filter((listing) => {
+      const base = listing.closedAt || listing.createdAt;
+      const baseMs = Date.parse(base || '');
+      if (!Number.isFinite(baseMs)) return false;
+      return now - baseMs >= olderThanMs;
+    })
+    .sort((a, b) => Date.parse((a.closedAt || a.createdAt) || 0) - Date.parse((b.closedAt || b.createdAt) || 0))
+    .slice(0, limit);
+}
+
+function deleteListing(id) {
+  const store = readStore();
+  const before = store.listings.length;
+  store.listings = store.listings.filter((listing) => listing.id !== id);
+  if (store.listings.length === before) return false;
+  writeStore(store);
+  return true;
+}
+
 module.exports = {
   createListing,
   updateListing,
   findListingById,
   findActiveListingsBySeller,
   findExpiredActiveListings,
+  findClosableListings,
+  deleteListing,
 };
