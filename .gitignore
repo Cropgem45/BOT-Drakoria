@@ -14,3 +14,9 @@ data/*.sqlite3-journal
 # Runtime logs e cache
 data/*.log
 data/logo_cdn.txt
+
+# Node marketplace
+marketplace/node_modules/
+marketplace/.env
+marketplace/data/
+marketplace/*.log
