@@ -5,15 +5,19 @@ const { categoryText, compactTimeLeft } = require('./formatters');
 function marketPanelEmbed() {
   return new EmbedBuilder()
     .setColor(theme.colors.gold)
-    .setTitle('Mercado Drakoria')
+    .setTitle('🛒 Mercado Drakoria')
     .setDescription(
       [
-        'Venda itens ou anuncie o que voce esta procurando.',
+        'Compra e venda de itens direto no Discord, com conversa privada.',
         '',
-        '**Escolha uma acao abaixo.**',
+        'Escolha uma acao abaixo:',
+        '',
+        '🟨 **Vender Item**: publique um anuncio de venda',
+        '🟦 **Comprar Item**: publique um anuncio de compra',
+        '📦 **Meus Anuncios**: gerencie seus anuncios',
       ].join('\n'),
     )
-    .setFooter({ text: theme.footer })
+    .setFooter({ text: `${theme.footer} • Painel do Mercado` })
     .setTimestamp();
 }
 
