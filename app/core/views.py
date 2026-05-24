@@ -587,20 +587,45 @@ class BetaProgramPanelView(discord.ui.View):
         self.bot = bot
 
     @discord.ui.button(
-        label="Enviar Cadastro",
-        emoji="\N{MEMO}",
-        style=discord.ButtonStyle.success,
+        label="Usar Código de Influencer",
+        style=discord.ButtonStyle.primary,
         custom_id="drakoria:beta:panel:start",
     )
     async def start_button(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                embed=self.bot.embeds.error("Contexto Inválido", "Este painel só funciona no servidor oficial."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_modal(BetaInfluencerCodeModal(self.bot))
+
+
+class BetaInfluencerCodeModal(discord.ui.Modal, title="Beta Fechado | Código"):
+    influencer_code = discord.ui.TextInput(
+        label="Código do influencer",
+        placeholder="Digite exatamente o código recebido",
+        max_length=32,
+        required=True,
+    )
+
+    def __init__(self, bot: Any) -> None:
+        super().__init__()
+        self.bot = bot
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         try:
             if not interaction.guild or not isinstance(interaction.user, discord.Member):
                 await interaction.response.send_message(
-                    embed=self.bot.embeds.error("Contexto Inválido", "Este painel só funciona no servidor oficial."),
+                    embed=self.bot.embeds.error("Contexto Inválido", "Use esta ação dentro do servidor oficial."),
                     ephemeral=True,
                 )
                 return
-            result = await self.bot.beta_program_service.start_or_resume_application(interaction, interaction.user)
+            result = await self.bot.beta_program_service.start_or_resume_application(
+                interaction,
+                interaction.user,
+                influencer_code=self.influencer_code.value,
+            )
             if result.status in {"already_approved", "already_pending", "blocked_reapply"}:
                 await interaction.response.send_message(
                     embed=self.bot.embeds.warning("Cadastro Beta", result.detail),
@@ -609,32 +634,25 @@ class BetaProgramPanelView(discord.ui.View):
                 return
             if result.application_id is None:
                 raise RuntimeError("Não foi possível abrir candidatura beta.")
-            app = await self.bot.db.get_beta_tester_application(result.application_id)
-            last_step = str(app.get("last_step") if app else "started")
-            if last_step in {"started"}:
-                await interaction.response.send_modal(BetaApplicationStepOneModal(self.bot, result.application_id))
-                return
-            if last_step in {"step_1"}:
-                await interaction.response.send_modal(BetaApplicationStepTwoModal(self.bot, result.application_id))
-                return
-            await interaction.response.send_modal(BetaApplicationStepThreeModal(self.bot, result.application_id))
+            await interaction.response.send_message(
+                embed=self.bot.embeds.success(
+                    "Convite Validado",
+                    "Seu código foi vinculado à candidatura beta. Clique em continuar para responder as etapas.",
+                ),
+                view=BetaProgramContinueView(self.bot),
+                ephemeral=True,
+            )
         except RuntimeError as exc:
             await interaction.response.send_message(
-                embed=self.bot.embeds.error("Falha ao iniciar candidatura beta", str(exc)),
+                embed=self.bot.embeds.error("Convite não aceito", str(exc)),
                 ephemeral=True,
             )
         except Exception as exc:
-            self.bot.log.exception("Falha inesperada no start do painel beta", exc_info=exc)
-            if interaction.response.is_done():
-                await interaction.followup.send(
-                    embed=self.bot.embeds.error("Falha no Programa Beta", "Erro interno inesperado."),
-                    ephemeral=True,
-                )
-            else:
-                await interaction.response.send_message(
-                    embed=self.bot.embeds.error("Falha no Programa Beta", "Erro interno inesperado."),
-                    ephemeral=True,
-                )
+            self.bot.log.exception("Falha ao iniciar beta por codigo de influencer", exc_info=exc)
+            await interaction.response.send_message(
+                embed=self.bot.embeds.error("Falha no Programa Beta", "Erro interno inesperado."),
+                ephemeral=True,
+            )
 
 
 class BetaProgramContinueView(discord.ui.View):
@@ -643,7 +661,7 @@ class BetaProgramContinueView(discord.ui.View):
         self.bot = bot
 
     @discord.ui.button(
-        label="Continuar Candidatura",
+        label="Continuar Candidatura Beta",
         style=discord.ButtonStyle.primary,
         custom_id="drakoria:beta:continue",
     )
@@ -658,7 +676,10 @@ class BetaProgramContinueView(discord.ui.View):
             app = await self.bot.db.get_latest_beta_tester_application(interaction.guild_id, interaction.user.id)
             if not app or str(app.get("status")) != "in_progress":
                 await interaction.response.send_message(
-                    embed=self.bot.embeds.warning("Sem candidatura em andamento", "Não há cadastro beta ativo para continuar."),
+                    embed=self.bot.embeds.warning(
+                        "Sem candidatura em andamento",
+                        "Não há candidatura beta ativa para continuar. Para iniciar, use um código de influencer no painel.",
+                    ),
                     ephemeral=True,
                 )
                 return
@@ -685,22 +706,30 @@ class BetaProgramContinueView(discord.ui.View):
                 )
 
 
-class BetaApplicationStepOneModal(discord.ui.Modal, title="Programa Beta | Etapa 1/3"):
-    age = discord.ui.TextInput(label="1) Qual é a sua idade?", max_length=3, required=True)
+class BetaApplicationStepOneModal(discord.ui.Modal, title="Beta por Convite | Etapa 1/3"):
+    age = discord.ui.TextInput(
+        label="1) Sua idade",
+        placeholder="Informe apenas números",
+        max_length=3,
+        required=True,
+    )
     availability = discord.ui.TextInput(
-        label="2) Dias/horários de disponibilidade",
+        label="2) Disponibilidade para testes",
+        placeholder="Dias, horários e frequência em que consegue testar",
         style=discord.TextStyle.paragraph,
         max_length=400,
         required=True,
     )
     bug_reaction = discord.ui.TextInput(
-        label="3) Quando encontra bug, o que faz?",
+        label="3) Como você reporta bugs?",
+        placeholder="Explique como descreveria passos, prints, vídeos ou contexto",
         style=discord.TextStyle.paragraph,
         max_length=400,
         required=True,
     )
     detailist_example = discord.ui.TextInput(
-        label="4) Você é detalhista? Cite exemplo",
+        label="4) Experiência com feedback",
+        placeholder="Conte se já testou jogos/servidores ou deu feedback organizado",
         style=discord.TextStyle.paragraph,
         max_length=400,
         required=True,
@@ -727,7 +756,7 @@ class BetaApplicationStepOneModal(discord.ui.Modal, title="Programa Beta | Etapa
             await interaction.response.send_message(
                 embed=self.bot.embeds.success(
                     "Etapa 1 concluída",
-                    "Suas respostas iniciais foram registradas. Clique em continuar candidatura.",
+                    "Suas respostas iniciais foram registradas. Continue para detalhar seu perfil de tester.",
                 ),
                 view=BetaProgramContinueView(self.bot),
                 ephemeral=True,
@@ -745,21 +774,24 @@ class BetaApplicationStepOneModal(discord.ui.Modal, title="Programa Beta | Etapa
             )
 
 
-class BetaApplicationStepTwoModal(discord.ui.Modal, title="Programa Beta | Etapa 2/3"):
+class BetaApplicationStepTwoModal(discord.ui.Modal, title="Beta por Convite | Etapa 2/3"):
     good_tester = discord.ui.TextInput(
-        label="5) O que torna alguém um bom beta tester?",
+        label="5) Por que foi indicado ao beta?",
+        placeholder="Explique o que você traz para uma fase fechada por convite",
         style=discord.TextStyle.paragraph,
         max_length=400,
         required=True,
     )
     critical_failure_report = discord.ui.TextInput(
-        label="6) Como comunicaria uma falha importante?",
+        label="6) Como reportaria falha crítica?",
+        placeholder="Descreva como avisaria a equipe sobre algo urgente",
         style=discord.TextStyle.paragraph,
         max_length=400,
         required=True,
     )
     best_test_type = discord.ui.TextInput(
-        label="7) Em qual tipo de teste se sai melhor?",
+        label="7) O que mais quer testar?",
+        placeholder="Exemplo: progressão, combate, economia, missões, bugs, balanceamento",
         style=discord.TextStyle.paragraph,
         max_length=500,
         required=True,
@@ -784,7 +816,7 @@ class BetaApplicationStepTwoModal(discord.ui.Modal, title="Programa Beta | Etapa
             await interaction.response.send_message(
                 embed=self.bot.embeds.success(
                     "Etapa 2 concluída",
-                    "Excelente. Clique em continuar candidatura para finalizar.",
+                    "Perfil de teste registrado. Continue para finalizar sua candidatura beta.",
                 ),
                 view=BetaProgramContinueView(self.bot),
                 ephemeral=True,
@@ -797,21 +829,24 @@ class BetaApplicationStepTwoModal(discord.ui.Modal, title="Programa Beta | Etapa
             )
 
 
-class BetaApplicationStepThreeModal(discord.ui.Modal, title="Programa Beta | Etapa 3/3"):
+class BetaApplicationStepThreeModal(discord.ui.Modal, title="Beta por Convite | Etapa 3/3"):
     consistency_commitment = discord.ui.TextInput(
-        label="8) Consegue manter constância e compromisso?",
+        label="8) Frequência de participação",
+        placeholder="Diga se consegue testar com constância durante o beta fechado",
         style=discord.TextStyle.paragraph,
         max_length=500,
         required=True,
     )
     why_join = discord.ui.TextInput(
-        label="9) Por que quer participar do Programa Beta?",
+        label="9) Por que quer testar Drakoria?",
+        placeholder="Conte sua motivação para entrar nesta fase por convite",
         style=discord.TextStyle.paragraph,
         max_length=500,
         required=True,
     )
     expected_contribution = discord.ui.TextInput(
-        label="10) Qual contribuição pode entregar?",
+        label="10) Que feedback pode entregar?",
+        placeholder="Resuma que tipo de retorno útil você pretende enviar à equipe",
         style=discord.TextStyle.paragraph,
         max_length=500,
         required=True,
@@ -844,7 +879,7 @@ class BetaApplicationStepThreeModal(discord.ui.Modal, title="Programa Beta | Eta
             await interaction.followup.send(
                 embed=self.bot.embeds.success(
                     "Candidatura Enviada",
-                    "Sua candidatura beta foi enviada para avaliação da equipe.",
+                    "Sua candidatura beta foi enviada para avaliação da equipe. O código de origem ficou registrado.",
                 ),
                 ephemeral=True,
             )

@@ -177,6 +177,25 @@ class DrakoriaBot(commands.Bot):
                 getattr(root_error, "code", None),
             )
             return
+        if isinstance(root_error, discord.app_commands.CommandNotFound):
+            command_name = str(getattr(root_error, "name", "") or "")
+            if command_name in {"cadastrar_influencer", "listar_influencers"}:
+                embed = self.embeds.warning(
+                    "Comando antigo removido",
+                    (
+                        "Esse atalho foi removido para evitar duplicidade.\n\n"
+                        "Use o comando oficial: `/beta_program cadastrar_influencer`.\n"
+                        "Se o Discord ainda sugerir `/cadastrar_influencer`, feche e abra o Discord ou use `Ctrl+R` para recarregar."
+                    ),
+                )
+                try:
+                    if interaction.response.is_done():
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+                    else:
+                        await interaction.response.send_message(embed=embed, ephemeral=True)
+                except Exception:
+                    self.log.exception("Falha ao responder comando antigo para interaction %s", interaction.id)
+                return
         self.log.exception("Falha em slash command: %s", root_error)
         message = str(root_error) if str(root_error).strip() else "Erro inesperado ao processar o comando."
         embed = self.embeds.error("Falha no comando", message[:1800])

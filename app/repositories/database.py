@@ -27,6 +27,7 @@ class Database:
         "registration_records",
         "member_registration_sessions",
         "beta_program_panel_state",
+        "beta_influencer_codes",
         "beta_tester_applications",
     )
 
@@ -276,6 +277,18 @@ class Database:
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
+                CREATE TABLE IF NOT EXISTS beta_influencer_codes (
+                    guild_id INTEGER NOT NULL,
+                    code TEXT NOT NULL,
+                    influencer_name TEXT NOT NULL,
+                    owner_user_id INTEGER,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_by_id INTEGER,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (guild_id, code)
+                );
+
                 CREATE TABLE IF NOT EXISTS beta_tester_applications (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     guild_id INTEGER NOT NULL,
@@ -296,6 +309,10 @@ class Database:
                     application_message_id INTEGER,
                     panel_channel_id INTEGER,
                     panel_message_id INTEGER,
+                    referral_type TEXT NOT NULL DEFAULT 'direct',
+                    influencer_code TEXT,
+                    influencer_name TEXT,
+                    influencer_owner_id INTEGER,
                     last_step TEXT NOT NULL DEFAULT 'started',
                     last_error TEXT,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -376,9 +393,44 @@ class Database:
                 """
             )
             await self._migrate_staff_timeclock_schema(conn)
+            await self._migrate_beta_program_schema(conn)
             await conn.commit()
         finally:
             await conn.close()
+
+    async def _migrate_beta_program_schema(self, conn: aiosqlite.Connection) -> None:
+        await conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS beta_influencer_codes (
+                guild_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                influencer_name TEXT NOT NULL,
+                owner_user_id INTEGER,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_by_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, code)
+            );
+            """
+        )
+        columns = await self.fetchall(conn, "PRAGMA table_info(beta_tester_applications)", ())
+        existing = {str(row["name"]) for row in columns}
+        migrations = {
+            "referral_type": "ALTER TABLE beta_tester_applications ADD COLUMN referral_type TEXT NOT NULL DEFAULT 'direct'",
+            "influencer_code": "ALTER TABLE beta_tester_applications ADD COLUMN influencer_code TEXT",
+            "influencer_name": "ALTER TABLE beta_tester_applications ADD COLUMN influencer_name TEXT",
+            "influencer_owner_id": "ALTER TABLE beta_tester_applications ADD COLUMN influencer_owner_id INTEGER",
+        }
+        for column, statement in migrations.items():
+            if column not in existing:
+                await conn.execute(statement)
+        await conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_beta_tester_applications_guild_influencer
+            ON beta_tester_applications (guild_id, influencer_code, status)
+            """
+        )
 
     async def _migrate_staff_timeclock_schema(self, conn: aiosqlite.Connection) -> None:
         tables = await self.fetchall(
@@ -1657,6 +1709,10 @@ class Database:
         *,
         panel_channel_id: int | None,
         panel_message_id: int | None,
+        referral_type: str = "direct",
+        influencer_code: str | None = None,
+        influencer_name: str | None = None,
+        influencer_owner_id: int | None = None,
         status: str = "in_progress",
     ) -> int:
         conn = await self.connect()
@@ -1670,18 +1726,127 @@ class Database:
                     answers_json,
                     panel_channel_id,
                     panel_message_id,
+                    referral_type,
+                    influencer_code,
+                    influencer_name,
+                    influencer_owner_id,
                     last_step,
                     updated_at
                 )
-                VALUES (?, ?, ?, '{}', ?, ?, 'started', CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, '{}', ?, ?, ?, ?, ?, ?, 'started', CURRENT_TIMESTAMP)
                 """,
-                (guild_id, user_id, status, panel_channel_id, panel_message_id),
+                (
+                    guild_id,
+                    user_id,
+                    status,
+                    panel_channel_id,
+                    panel_message_id,
+                    referral_type,
+                    influencer_code,
+                    influencer_name,
+                    influencer_owner_id,
+                ),
             )
             await conn.commit()
             row = await self.fetchone(conn, "SELECT last_insert_rowid() AS application_id", ())
         finally:
             await conn.close()
         return int(row["application_id"])
+
+    async def upsert_beta_influencer_code(
+        self,
+        guild_id: int,
+        code: str,
+        influencer_name: str,
+        *,
+        owner_user_id: int | None = None,
+        created_by_id: int | None = None,
+        active: bool = True,
+    ) -> None:
+        await self._run_write(
+            """
+            INSERT INTO beta_influencer_codes (
+                guild_id, code, influencer_name, owner_user_id, active, created_by_id, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id, code) DO UPDATE SET
+                influencer_name = excluded.influencer_name,
+                owner_user_id = excluded.owner_user_id,
+                active = excluded.active,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (guild_id, code, influencer_name, owner_user_id, int(active), created_by_id),
+        )
+
+    async def get_beta_influencer_code(self, guild_id: int, code: str) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                "SELECT * FROM beta_influencer_codes WHERE guild_id = ? AND code = ?",
+                (guild_id, code),
+            )
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
+    async def set_beta_influencer_code_active(self, guild_id: int, code: str, active: bool) -> bool:
+        conn = await self.connect()
+        try:
+            cursor = await conn.execute(
+                """
+                UPDATE beta_influencer_codes
+                SET active = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE guild_id = ? AND code = ?
+                """,
+                (int(active), guild_id, code),
+            )
+            await conn.commit()
+            changed = cursor.rowcount > 0
+            await cursor.close()
+        finally:
+            await conn.close()
+        return changed
+
+    async def list_beta_influencer_codes(self, guild_id: int, *, include_inactive: bool = False) -> list[dict[str, Any]]:
+        clauses = ["guild_id = ?"]
+        params: list[Any] = [guild_id]
+        if not include_inactive:
+            clauses.append("active = 1")
+        query = (
+            "SELECT * FROM beta_influencer_codes WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY active DESC, influencer_name COLLATE NOCASE ASC, code ASC"
+        )
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(conn, query, tuple(params))
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
+    async def get_beta_influencer_code_stats(self, guild_id: int, code: str) -> dict[str, int]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(
+                conn,
+                """
+                SELECT status, COUNT(*) AS total
+                FROM beta_tester_applications
+                WHERE guild_id = ? AND influencer_code = ?
+                GROUP BY status
+                """,
+                (guild_id, code),
+            )
+        finally:
+            await conn.close()
+        stats = {"total": 0, "in_progress": 0, "pending": 0, "approved": 0, "rejected": 0}
+        for row in rows:
+            status = str(row["status"])
+            total = int(row["total"])
+            stats[status] = total
+            stats["total"] += total
+        return stats
 
     async def get_beta_tester_application(self, application_id: int) -> dict[str, Any] | None:
         conn = await self.connect()
