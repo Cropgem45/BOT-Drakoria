@@ -1,0 +1,11 @@
+2026-05-24 16:11:09,947 | INFO | discord.client | logging in using static token
+2026-05-24 16:11:10,753 | INFO | drakoria.bot | Slash commands sincronizados na guild 1486185045374013571: adddonate, admin, anuncio, beta_program, cadastro, registro, removedonate, setdonate, ticket, top
+2026-05-24 16:11:11,268 | INFO | discord.gateway | Shard ID None has connected to Gateway (Session ID: 004e3e7a0d1df56a9f9cc1a0cb57b633).
+2026-05-24 16:11:13,266 | INFO | drakoria.bot | Bot pronto como Drakoria#3549 (1489798397413036202)
+2026-05-24 16:11:13,270 | INFO | drakoria.bot | Logo CDN carregada do cache.
+2026-05-24 16:12:27,022 | WARNING | drakoria.bot | Interacao beta indisponivel no error handler (code=40060).
+2026-05-24 16:12:27,022 | WARNING | drakoria.bot | Interacao 1508185921969717529 indisponivel no handler global (code=40060); erro ignorado.
+2026-05-24 16:12:49,924 | WARNING | drakoria.bot | Interacao beta indisponivel no error handler (code=40060).
+2026-05-24 16:12:49,925 | WARNING | drakoria.bot | Interacao 1508186018422067280 indisponivel no handler global (code=40060); erro ignorado.
+2026-05-24 16:13:44,958 | WARNING | drakoria.bot | Interacao beta indisponivel no error handler (code=10062).
+2026-05-24 16:13:44,959 | WARNING | drakoria.bot | Interacao 1508186248903397518 indisponivel no handler global (code=10062); erro ignorado.
