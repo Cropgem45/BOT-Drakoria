@@ -282,6 +282,7 @@ class Database:
                     code TEXT NOT NULL,
                     influencer_name TEXT NOT NULL,
                     owner_user_id INTEGER,
+                    slot_limit INTEGER NOT NULL DEFAULT 5,
                     active INTEGER NOT NULL DEFAULT 1,
                     created_by_id INTEGER,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -406,6 +407,7 @@ class Database:
                 code TEXT NOT NULL,
                 influencer_name TEXT NOT NULL,
                 owner_user_id INTEGER,
+                slot_limit INTEGER NOT NULL DEFAULT 5,
                 active INTEGER NOT NULL DEFAULT 1,
                 created_by_id INTEGER,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -425,6 +427,10 @@ class Database:
         for column, statement in migrations.items():
             if column not in existing:
                 await conn.execute(statement)
+        influencer_columns = await self.fetchall(conn, "PRAGMA table_info(beta_influencer_codes)", ())
+        influencer_existing = {str(row["name"]) for row in influencer_columns}
+        if "slot_limit" not in influencer_existing:
+            await conn.execute("ALTER TABLE beta_influencer_codes ADD COLUMN slot_limit INTEGER NOT NULL DEFAULT 5")
         await conn.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_beta_tester_applications_guild_influencer
@@ -1761,21 +1767,23 @@ class Database:
         *,
         owner_user_id: int | None = None,
         created_by_id: int | None = None,
+        slot_limit: int = 5,
         active: bool = True,
     ) -> None:
         await self._run_write(
             """
             INSERT INTO beta_influencer_codes (
-                guild_id, code, influencer_name, owner_user_id, active, created_by_id, updated_at
+                guild_id, code, influencer_name, owner_user_id, slot_limit, active, created_by_id, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(guild_id, code) DO UPDATE SET
                 influencer_name = excluded.influencer_name,
                 owner_user_id = excluded.owner_user_id,
+                slot_limit = excluded.slot_limit,
                 active = excluded.active,
                 updated_at = CURRENT_TIMESTAMP
             """,
-            (guild_id, code, influencer_name, owner_user_id, int(active), created_by_id),
+            (guild_id, code, influencer_name, owner_user_id, slot_limit, int(active), created_by_id),
         )
 
     async def get_beta_influencer_code(self, guild_id: int, code: str) -> dict[str, Any] | None:

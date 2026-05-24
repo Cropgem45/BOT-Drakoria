@@ -15,10 +15,10 @@ Referencia dos comandos ativos no fechamento.
 ## /beta_program
 
 - `publicar_painel`: publica/sincroniza painel fechado do programa beta.
-- `cadastrar_influencer`: cria ou atualiza codigo de influencer para ingresso beta.
+- `cadastrar_influencer`: cria ou atualiza codigo de influencer para ingresso beta, com 5 vagas por padrao.
 - `ativar_influencer`: reativa um codigo de influencer.
 - `desativar_influencer`: desativa um codigo de influencer.
-- `listar_influencers`: lista os codigos de influencer cadastrados.
+- `listar_influencers`: lista os codigos de influencer cadastrados e vagas usadas.
 - `stats_influencer`: mostra estatisticas de candidaturas por codigo.
 
 ## /ticket

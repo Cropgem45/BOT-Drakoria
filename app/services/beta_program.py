@@ -38,6 +38,7 @@ class BetaProgramService:
         self.bot = bot
         self._user_locks: dict[int, asyncio.Lock] = {}
         self._application_locks: dict[int, asyncio.Lock] = {}
+        self._influencer_code_locks: dict[tuple[int, str], asyncio.Lock] = {}
         self._brand_logo_cache: dict[str, Image.Image] = {}
 
     def panel_enabled(self) -> bool:
@@ -49,13 +50,13 @@ class BetaProgramService:
             "Nesta etapa, novas candidaturas só são abertas para pessoas que chegaram por uma campanha "
             "de influencer parceiro e possuem um código válido de ingresso.\n\n"
             "Se você recebeu um código, use o botão abaixo para vinculá-lo à sua candidatura. "
-            "Depois disso, responderá às etapas de avaliação normalmente."
+            "Cada código possui vagas limitadas; quando as vagas acabarem, ele deixa de liberar novas entradas."
         )
         embed = self.bot.embeds.make(
             title="Programa Beta Tester | Acesso por Convite",
             description=description,
             fields=[
-                ("Ingresso", "Somente com código de influencer ativo", False),
+                ("Ingresso", "Somente com código de influencer ativo e com vagas disponíveis", False),
                 ("Como funciona", "Informe o código, preencha a candidatura e aguarde avaliação da equipe.", False),
                 ("Recompensas", "Cargo especial, carteirinha digital e benefícios exclusivos do programa.", False),
                 ("Candidaturas", f"<#{self.bot.server_map.beta_program_application_channel_id()}>", True),
@@ -148,17 +149,19 @@ class BetaProgramService:
                             detail="Sua candidatura já foi enviada e aguarda avaliação da equipe.",
                         )
                     if influencer and str(latest.get("referral_type") or "direct") != "influencer":
-                        await self.bot.db.update_beta_tester_application(
-                            int(latest["id"]),
-                            {
-                                "referral_type": "influencer",
-                                "influencer_code": normalized_code,
-                                "influencer_name": str(influencer["influencer_name"]),
-                                "influencer_owner_id": int(influencer["owner_user_id"])
-                                if influencer.get("owner_user_id")
-                                else None,
-                            },
-                        )
+                        async with self._influencer_code_lock(interaction.guild.id, normalized_code):
+                            await self._ensure_influencer_slots_available(interaction.guild.id, normalized_code, influencer)
+                            await self.bot.db.update_beta_tester_application(
+                                int(latest["id"]),
+                                {
+                                    "referral_type": "influencer",
+                                    "influencer_code": normalized_code,
+                                    "influencer_name": str(influencer["influencer_name"]),
+                                    "influencer_owner_id": int(influencer["owner_user_id"])
+                                    if influencer.get("owner_user_id")
+                                    else None,
+                                },
+                            )
                     return BetaStartResult(
                         status="resume",
                         application_id=int(latest["id"]),
@@ -176,17 +179,19 @@ class BetaProgramService:
                     "O Programa Beta está fechado para entrada direta. Use um código válido de influencer para iniciar."
                 )
 
-            application_id = await self.bot.db.create_beta_tester_application(
-                interaction.guild.id,
-                member.id,
-                panel_channel_id=interaction.channel_id,
-                panel_message_id=interaction.message.id if interaction.message else None,
-                referral_type="influencer" if influencer else "direct",
-                influencer_code=normalized_code if influencer else None,
-                influencer_name=str(influencer["influencer_name"]) if influencer else None,
-                influencer_owner_id=int(influencer["owner_user_id"]) if influencer and influencer.get("owner_user_id") else None,
-                status="in_progress",
-            )
+            async with self._influencer_code_lock(interaction.guild.id, normalized_code):
+                await self._ensure_influencer_slots_available(interaction.guild.id, normalized_code, influencer)
+                application_id = await self.bot.db.create_beta_tester_application(
+                    interaction.guild.id,
+                    member.id,
+                    panel_channel_id=interaction.channel_id,
+                    panel_message_id=interaction.message.id if interaction.message else None,
+                    referral_type="influencer" if influencer else "direct",
+                    influencer_code=normalized_code if influencer else None,
+                    influencer_name=str(influencer["influencer_name"]) if influencer else None,
+                    influencer_owner_id=int(influencer["owner_user_id"]) if influencer and influencer.get("owner_user_id") else None,
+                    status="in_progress",
+                )
             await self._dispatch_log(
                 title="Candidatura Beta Iniciada",
                 description=f"{member.mention} iniciou candidatura do Programa Beta.",
@@ -212,6 +217,7 @@ class BetaProgramService:
         influencer_name: str,
         owner_user_id: int | None,
         created_by_id: int | None,
+        slot_limit: int | None = None,
     ) -> str:
         normalized = self.normalize_influencer_code(code)
         if not normalized:
@@ -221,12 +227,16 @@ class BetaProgramService:
         clean_name = influencer_name.strip()[:80]
         if not clean_name:
             raise RuntimeError("Informe o nome do influencer.")
+        resolved_slot_limit = slot_limit if slot_limit is not None else 5
+        if resolved_slot_limit < 1 or resolved_slot_limit > 100:
+            raise RuntimeError("A quantidade de vagas precisa ficar entre 1 e 100.")
         await self.bot.db.upsert_beta_influencer_code(
             guild_id,
             normalized,
             clean_name,
             owner_user_id=owner_user_id,
             created_by_id=created_by_id,
+            slot_limit=resolved_slot_limit,
             active=True,
         )
         return normalized
@@ -252,6 +262,22 @@ class BetaProgramService:
             raise RuntimeError("Código de influencer não encontrado.")
         stats = await self.bot.db.get_beta_influencer_code_stats(guild_id, normalized)
         return influencer, stats
+
+    async def _ensure_influencer_slots_available(
+        self,
+        guild_id: int,
+        normalized_code: str,
+        influencer: dict[str, Any],
+    ) -> None:
+        stats = await self.bot.db.get_beta_influencer_code_stats(guild_id, normalized_code)
+        used_slots = int(stats.get("total", 0))
+        slot_limit = int(influencer.get("slot_limit") or 5)
+        if used_slots >= slot_limit:
+            name = str(influencer.get("influencer_name") or "este influencer")
+            raise RuntimeError(
+                f"As vagas do código `{normalized_code}` de **{name}** acabaram "
+                f"({used_slots}/{slot_limit}). Peça outro código ativo para participar do beta."
+            )
 
     async def save_step_answers(self, application_id: int, step: str, answers: dict[str, str]) -> None:
         application = await self.bot.db.get_beta_tester_application(application_id)
@@ -1130,6 +1156,12 @@ class BetaProgramService:
         if application_id not in self._application_locks:
             self._application_locks[application_id] = asyncio.Lock()
         return self._application_locks[application_id]
+
+    def _influencer_code_lock(self, guild_id: int, normalized_code: str) -> asyncio.Lock:
+        key = (guild_id, normalized_code)
+        if key not in self._influencer_code_locks:
+            self._influencer_code_locks[key] = asyncio.Lock()
+        return self._influencer_code_locks[key]
 
     @staticmethod
     def _now_human() -> str:

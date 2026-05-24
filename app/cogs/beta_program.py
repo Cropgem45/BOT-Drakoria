@@ -36,6 +36,7 @@ class BetaProgramCog(
         codigo="Código que os convidados irão informar no painel beta",
         nome="Nome público do influencer",
         usuario="Usuário Discord do influencer, se estiver no servidor",
+        vagas="Quantidade de vagas disponíveis para este código; padrão: 5",
     )
     async def cadastrar_influencer(
         self,
@@ -43,6 +44,7 @@ class BetaProgramCog(
         codigo: str,
         nome: str,
         usuario: discord.Member | None = None,
+        vagas: int | None = None,
     ) -> None:
         if not self.bot.permission_service.has(interaction.user, "manage_beta_program"):
             raise app_commands.CheckFailure("Sem permissão para gerenciar influencers beta.")
@@ -55,12 +57,18 @@ class BetaProgramCog(
             influencer_name=nome,
             owner_user_id=usuario.id if usuario else None,
             created_by_id=interaction.user.id,
+            slot_limit=vagas,
         )
         owner = usuario.mention if usuario else "sem usuário vinculado"
+        slot_label = vagas if vagas is not None else 5
         await interaction.followup.send(
             embed=self.bot.embeds.success(
                 "Código de Influencer Salvo",
-                f"Código `{normalized}` vinculado a **{nome.strip()}** ({owner}). Ele já pode ser usado no painel beta.",
+                (
+                    f"Código `{normalized}` vinculado a **{nome.strip()}** ({owner}).\n"
+                    f"Vagas disponíveis: **{slot_label}**.\n"
+                    "Ele já pode ser usado no painel beta."
+                ),
             ),
             ephemeral=True,
         )
@@ -113,7 +121,13 @@ class BetaProgramCog(
             for row in rows[:20]:
                 owner = f" | <@{row['owner_user_id']}>" if row.get("owner_user_id") else ""
                 status = "ativo" if int(row.get("active", 0)) else "inativo"
-                lines.append(f"`{row['code']}` - **{row['influencer_name']}** ({status}){owner}")
+                stats = await self.bot.db.get_beta_influencer_code_stats(interaction.guild.id, str(row["code"]))
+                slot_limit = int(row.get("slot_limit") or 5)
+                used_slots = int(stats.get("total", 0))
+                lines.append(
+                    f"`{row['code']}` - **{row['influencer_name']}** ({status}) "
+                    f"| vagas: **{used_slots}/{slot_limit}**{owner}"
+                )
             description = "\n".join(lines)
             if len(rows) > len(lines):
                 description += f"\n... e mais {len(rows) - len(lines)} código(s)."
@@ -135,6 +149,7 @@ class BetaProgramCog(
             f"Influencer: **{influencer['influencer_name']}**\n"
             f"Código: `{influencer['code']}`\n"
             f"Status: **{'ativo' if int(influencer.get('active', 0)) else 'inativo'}**\n\n"
+            f"Vagas usadas: **{stats['total']}/{int(influencer.get('slot_limit') or 5)}**\n"
             f"Total: **{stats['total']}**\n"
             f"Em andamento: **{stats['in_progress']}**\n"
             f"Pendentes: **{stats['pending']}**\n"
