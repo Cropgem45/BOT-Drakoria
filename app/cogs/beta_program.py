@@ -101,6 +101,28 @@ class BetaProgramCog(
             ephemeral=True,
         )
 
+    @app_commands.command(name="resetar_vagas", description="Reseta vagas usadas de um código ou de todos os influencers")
+    @app_commands.guild_only()
+    @app_commands.describe(codigo="Código específico para resetar; deixe vazio para resetar todos")
+    async def resetar_vagas(self, interaction: discord.Interaction, codigo: str | None = None) -> None:
+        if not self.bot.permission_service.has(interaction.user, "manage_beta_program"):
+            raise app_commands.CheckFailure("Sem permissão para gerenciar influencers beta.")
+        if not interaction.guild:
+            raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        normalized, changed = await self.bot.beta_program_service.reset_influencer_slots(
+            interaction.guild.id,
+            codigo,
+        )
+        if normalized:
+            description = f"🔄 As vagas usadas do código `{normalized}` foram zeradas."
+        else:
+            description = f"🔄 As vagas usadas de **{changed}** código(s) de influencer foram zeradas."
+        await interaction.followup.send(
+            embed=self.bot.embeds.success("🎟️ Vagas Resetadas", description),
+            ephemeral=True,
+        )
+
     @app_commands.command(name="listar_influencers", description="Lista os códigos de influencer do Programa Beta")
     @app_commands.guild_only()
     @app_commands.describe(incluir_inativos="Mostra também códigos desativados")
@@ -121,9 +143,8 @@ class BetaProgramCog(
             for row in rows[:20]:
                 owner = f" | <@{row['owner_user_id']}>" if row.get("owner_user_id") else ""
                 status = "ativo" if int(row.get("active", 0)) else "inativo"
-                stats = await self.bot.db.get_beta_influencer_code_stats(interaction.guild.id, str(row["code"]))
                 slot_limit = int(row.get("slot_limit") or 5)
-                used_slots = int(stats.get("total", 0))
+                used_slots = int(row.get("slot_used") or 0)
                 lines.append(
                     f"🎟️ `{row['code']}` - **{row['influencer_name']}** ({status}) "
                     f"| 📊 vagas: **{used_slots}/{slot_limit}**{owner}"
@@ -149,7 +170,7 @@ class BetaProgramCog(
             f"👤 Influencer: **{influencer['influencer_name']}**\n"
             f"🎟️ Código: `{influencer['code']}`\n"
             f"📌 Status: **{'ativo' if int(influencer.get('active', 0)) else 'inativo'}**\n\n"
-            f"📊 Vagas usadas: **{stats['total']}/{int(influencer.get('slot_limit') or 5)}**\n"
+            f"📊 Vagas usadas: **{int(influencer.get('slot_used') or 0)}/{int(influencer.get('slot_limit') or 5)}**\n"
             f"🧾 Total: **{stats['total']}**\n"
             f"📝 Em andamento: **{stats['in_progress']}**\n"
             f"⏳ Pendentes: **{stats['pending']}**\n"

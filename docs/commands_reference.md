@@ -18,6 +18,7 @@ Referencia dos comandos ativos no fechamento.
 - `cadastrar_influencer`: cria ou atualiza codigo de influencer para ingresso beta, com 5 vagas por padrao.
 - `ativar_influencer`: reativa um codigo de influencer.
 - `desativar_influencer`: desativa um codigo de influencer.
+- `resetar_vagas`: zera as vagas usadas de um codigo ou de todos os influencers.
 - `listar_influencers`: lista os codigos de influencer cadastrados e vagas usadas.
 - `stats_influencer`: mostra estatisticas de candidaturas por codigo.
 

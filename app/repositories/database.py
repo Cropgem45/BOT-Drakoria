@@ -283,6 +283,7 @@ class Database:
                     influencer_name TEXT NOT NULL,
                     owner_user_id INTEGER,
                     slot_limit INTEGER NOT NULL DEFAULT 5,
+                    slot_used INTEGER NOT NULL DEFAULT 0,
                     active INTEGER NOT NULL DEFAULT 1,
                     created_by_id INTEGER,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -408,6 +409,7 @@ class Database:
                 influencer_name TEXT NOT NULL,
                 owner_user_id INTEGER,
                 slot_limit INTEGER NOT NULL DEFAULT 5,
+                slot_used INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 1,
                 created_by_id INTEGER,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -431,6 +433,8 @@ class Database:
         influencer_existing = {str(row["name"]) for row in influencer_columns}
         if "slot_limit" not in influencer_existing:
             await conn.execute("ALTER TABLE beta_influencer_codes ADD COLUMN slot_limit INTEGER NOT NULL DEFAULT 5")
+        if "slot_used" not in influencer_existing:
+            await conn.execute("ALTER TABLE beta_influencer_codes ADD COLUMN slot_used INTEGER NOT NULL DEFAULT 0")
         await conn.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_beta_tester_applications_guild_influencer
@@ -1773,9 +1777,9 @@ class Database:
         await self._run_write(
             """
             INSERT INTO beta_influencer_codes (
-                guild_id, code, influencer_name, owner_user_id, slot_limit, active, created_by_id, updated_at
+                guild_id, code, influencer_name, owner_user_id, slot_limit, slot_used, active, created_by_id, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, 0, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(guild_id, code) DO UPDATE SET
                 influencer_name = excluded.influencer_name,
                 owner_user_id = excluded.owner_user_id,
@@ -1815,6 +1819,55 @@ class Database:
         finally:
             await conn.close()
         return changed
+
+    async def try_consume_beta_influencer_slot(self, guild_id: int, code: str) -> bool:
+        conn = await self.connect()
+        try:
+            cursor = await conn.execute(
+                """
+                UPDATE beta_influencer_codes
+                SET slot_used = slot_used + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE guild_id = ?
+                  AND code = ?
+                  AND active = 1
+                  AND slot_used < slot_limit
+                """,
+                (guild_id, code),
+            )
+            await conn.commit()
+            consumed = cursor.rowcount > 0
+            await cursor.close()
+        finally:
+            await conn.close()
+        return consumed
+
+    async def reset_beta_influencer_slots(self, guild_id: int, code: str | None = None) -> int:
+        conn = await self.connect()
+        try:
+            if code:
+                cursor = await conn.execute(
+                    """
+                    UPDATE beta_influencer_codes
+                    SET slot_used = 0, updated_at = CURRENT_TIMESTAMP
+                    WHERE guild_id = ? AND code = ?
+                    """,
+                    (guild_id, code),
+                )
+            else:
+                cursor = await conn.execute(
+                    """
+                    UPDATE beta_influencer_codes
+                    SET slot_used = 0, updated_at = CURRENT_TIMESTAMP
+                    WHERE guild_id = ?
+                    """,
+                    (guild_id,),
+                )
+            await conn.commit()
+            changed = cursor.rowcount
+            await cursor.close()
+        finally:
+            await conn.close()
+        return int(changed)
 
     async def list_beta_influencer_codes(self, guild_id: int, *, include_inactive: bool = False) -> list[dict[str, Any]]:
         clauses = ["guild_id = ?"]

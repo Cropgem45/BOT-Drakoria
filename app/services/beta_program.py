@@ -152,7 +152,7 @@ class BetaProgramService:
                         )
                     if influencer and str(latest.get("referral_type") or "direct") != "influencer":
                         async with self._influencer_code_lock(interaction.guild.id, normalized_code):
-                            await self._ensure_influencer_slots_available(interaction.guild.id, normalized_code, influencer)
+                            await self._consume_influencer_slot(interaction.guild.id, normalized_code, influencer)
                             await self.bot.db.update_beta_tester_application(
                                 int(latest["id"]),
                                 {
@@ -182,7 +182,7 @@ class BetaProgramService:
                 )
 
             async with self._influencer_code_lock(interaction.guild.id, normalized_code):
-                await self._ensure_influencer_slots_available(interaction.guild.id, normalized_code, influencer)
+                await self._consume_influencer_slot(interaction.guild.id, normalized_code, influencer)
                 application_id = await self.bot.db.create_beta_tester_application(
                     interaction.guild.id,
                     member.id,
@@ -195,8 +195,8 @@ class BetaProgramService:
                     status="in_progress",
                 )
             await self._dispatch_log(
-            title="🧪 Candidatura Beta Iniciada",
-            description=f"{member.mention} iniciou candidatura do Programa Beta.",
+                title="🧪 Candidatura Beta Iniciada",
+                description=f"{member.mention} iniciou candidatura do Programa Beta.",
                 color=self.bot.embeds.default_color,
                 fields=[
                     ("Usuário", f"{member}", False),
@@ -265,21 +265,34 @@ class BetaProgramService:
         stats = await self.bot.db.get_beta_influencer_code_stats(guild_id, normalized)
         return influencer, stats
 
-    async def _ensure_influencer_slots_available(
+    async def reset_influencer_slots(self, guild_id: int, code: str | None = None) -> tuple[str | None, int]:
+        normalized = self.normalize_influencer_code(code)
+        if code and not normalized:
+            raise RuntimeError("❌ Informe um código de influencer válido.")
+        changed = await self.bot.db.reset_beta_influencer_slots(guild_id, normalized or None)
+        if code and changed == 0:
+            raise RuntimeError("❌ Código de influencer não encontrado.")
+        return normalized or None, changed
+
+    async def _consume_influencer_slot(
         self,
         guild_id: int,
         normalized_code: str,
         influencer: dict[str, Any],
     ) -> None:
-        stats = await self.bot.db.get_beta_influencer_code_stats(guild_id, normalized_code)
-        used_slots = int(stats.get("total", 0))
-        slot_limit = int(influencer.get("slot_limit") or 5)
-        if used_slots >= slot_limit:
-            name = str(influencer.get("influencer_name") or "este influencer")
-            raise RuntimeError(
-                f"🚫 As vagas do código `{normalized_code}` de **{name}** acabaram "
-                f"({used_slots}/{slot_limit}). Peça outro código ativo para participar do beta."
-            )
+        consumed = await self.bot.db.try_consume_beta_influencer_slot(guild_id, normalized_code)
+        if consumed:
+            return
+        refreshed = await self.bot.db.get_beta_influencer_code(guild_id, normalized_code) or influencer
+        used_slots = int(refreshed.get("slot_used") or 0)
+        slot_limit = int(refreshed.get("slot_limit") or 5)
+        if not int(refreshed.get("active", 0)):
+            raise RuntimeError("🚫 Este código de influencer está desativado no momento.")
+        name = str(refreshed.get("influencer_name") or "este influencer")
+        raise RuntimeError(
+            f"🚫 As vagas do código `{normalized_code}` de **{name}** acabaram "
+            f"({used_slots}/{slot_limit}). Peça outro código ativo para participar do beta."
+        )
 
     async def save_step_answers(self, application_id: int, step: str, answers: dict[str, str]) -> None:
         application = await self.bot.db.get_beta_tester_application(application_id)
