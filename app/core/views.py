@@ -587,7 +587,7 @@ class BetaProgramPanelView(discord.ui.View):
         self.bot = bot
 
     @discord.ui.button(
-        label="Usar Código de Influencer",
+        label="🎟️ Usar Código de Influencer",
         style=discord.ButtonStyle.primary,
         custom_id="drakoria:beta:panel:start",
     )
@@ -601,10 +601,10 @@ class BetaProgramPanelView(discord.ui.View):
         await interaction.response.send_modal(BetaInfluencerCodeModal(self.bot))
 
 
-class BetaInfluencerCodeModal(discord.ui.Modal, title="Beta Fechado | Código"):
+class BetaInfluencerCodeModal(discord.ui.Modal, title="Beta Fechado | Código 🎟️"):
     influencer_code = discord.ui.TextInput(
-        label="Código do influencer",
-        placeholder="Digite exatamente o código recebido",
+        label="🎟️ Código do influencer",
+        placeholder="Digite exatamente o código recebido; vagas são limitadas",
         max_length=32,
         required=True,
     )
@@ -628,7 +628,7 @@ class BetaInfluencerCodeModal(discord.ui.Modal, title="Beta Fechado | Código"):
             )
             if result.status in {"already_approved", "already_pending", "blocked_reapply"}:
                 await interaction.response.send_message(
-                    embed=self.bot.embeds.warning("Cadastro Beta", result.detail),
+                    embed=self.bot.embeds.warning("🧪 Cadastro Beta", result.detail),
                     ephemeral=True,
                 )
                 return
@@ -636,15 +636,18 @@ class BetaInfluencerCodeModal(discord.ui.Modal, title="Beta Fechado | Código"):
                 raise RuntimeError("Não foi possível abrir candidatura beta.")
             await interaction.response.send_message(
                 embed=self.bot.embeds.success(
-                    "Convite Validado",
-                    "Seu código foi vinculado à candidatura beta. Clique em continuar para responder as etapas.",
+                    "✅ Convite Validado",
+                    (
+                        "Seu código foi vinculado à candidatura beta e uma vaga foi reservada para você.\n"
+                        "Clique em continuar para responder as etapas. 📝"
+                    ),
                 ),
                 view=BetaProgramContinueView(self.bot),
                 ephemeral=True,
             )
         except RuntimeError as exc:
             await interaction.response.send_message(
-                embed=self.bot.embeds.error("Convite não aceito", str(exc)),
+                embed=self.bot.embeds.error("🚫 Convite não aceito", str(exc)),
                 ephemeral=True,
             )
         except Exception as exc:
@@ -661,7 +664,7 @@ class BetaProgramContinueView(discord.ui.View):
         self.bot = bot
 
     @discord.ui.button(
-        label="Continuar Candidatura Beta",
+        label="📝 Continuar Candidatura Beta",
         style=discord.ButtonStyle.primary,
         custom_id="drakoria:beta:continue",
     )
@@ -677,8 +680,8 @@ class BetaProgramContinueView(discord.ui.View):
             if not app or str(app.get("status")) != "in_progress":
                 await interaction.response.send_message(
                     embed=self.bot.embeds.warning(
-                        "Sem candidatura em andamento",
-                        "Não há candidatura beta ativa para continuar. Para iniciar, use um código de influencer no painel.",
+                        "⚠️ Sem candidatura em andamento",
+                        "Não há candidatura beta ativa para continuar. Para iniciar, use um código de influencer com vagas disponíveis no painel. 🎟️",
                     ),
                     ephemeral=True,
                 )
@@ -755,8 +758,8 @@ class BetaApplicationStepOneModal(discord.ui.Modal, title="Beta por Convite | Et
             )
             await interaction.response.send_message(
                 embed=self.bot.embeds.success(
-                    "Etapa 1 concluída",
-                    "Suas respostas iniciais foram registradas. Continue para detalhar seu perfil de tester.",
+                    "✅ Etapa 1 concluída",
+                    "Suas respostas iniciais foram registradas. Continue para detalhar seu perfil de tester. 🧪",
                 ),
                 view=BetaProgramContinueView(self.bot),
                 ephemeral=True,
@@ -815,8 +818,8 @@ class BetaApplicationStepTwoModal(discord.ui.Modal, title="Beta por Convite | Et
             )
             await interaction.response.send_message(
                 embed=self.bot.embeds.success(
-                    "Etapa 2 concluída",
-                    "Perfil de teste registrado. Continue para finalizar sua candidatura beta.",
+                    "✅ Etapa 2 concluída",
+                    "Perfil de teste registrado. Continue para finalizar sua candidatura beta. 📝",
                 ),
                 view=BetaProgramContinueView(self.bot),
                 ephemeral=True,
@@ -878,8 +881,8 @@ class BetaApplicationStepThreeModal(discord.ui.Modal, title="Beta por Convite | 
             await self.bot.beta_program_service.submit_application(interaction.guild, interaction.user, self.application_id)
             await interaction.followup.send(
                 embed=self.bot.embeds.success(
-                    "Candidatura Enviada",
-                    "Sua candidatura beta foi enviada para avaliação da equipe. O código de origem ficou registrado.",
+                    "📨 Candidatura Enviada",
+                    "Sua candidatura beta foi enviada para avaliação da equipe. O código de origem e a vaga usada ficaram registrados. 🎟️",
                 ),
                 ephemeral=True,
             )

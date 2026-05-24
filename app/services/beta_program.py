@@ -46,29 +46,31 @@ class BetaProgramService:
 
     def build_panel_embed(self, guild: discord.Guild | None) -> discord.Embed:
         description = (
-            "O Programa Oficial de Beta Testers do Drakoria está em fase fechada por convite.\n\n"
-            "Nesta etapa, novas candidaturas só são abertas para pessoas que chegaram por uma campanha "
+            "🧪 O Programa Oficial de Beta Testers do Drakoria está em fase fechada por convite.\n\n"
+            "🎟️ Nesta etapa, novas candidaturas só são abertas para pessoas que chegaram por uma campanha "
             "de influencer parceiro e possuem um código válido de ingresso.\n\n"
-            "Se você recebeu um código, use o botão abaixo para vinculá-lo à sua candidatura. "
-            "Cada código possui vagas limitadas; quando as vagas acabarem, ele deixa de liberar novas entradas."
+            "📌 Cada influencer possui **5 vagas por padrão**. Quando as vagas de um código acabarem, "
+            "ele deixa de liberar novas entradas automaticamente.\n\n"
+            "✅ Se você recebeu um código, use o botão abaixo para vinculá-lo à sua candidatura."
         )
         embed = self.bot.embeds.make(
-            title="Programa Beta Tester | Acesso por Convite",
+            title="🧪 Programa Beta Tester | Acesso por Convite",
             description=description,
             fields=[
-                ("Ingresso", "Somente com código de influencer ativo e com vagas disponíveis", False),
-                ("Como funciona", "Informe o código, preencha a candidatura e aguarde avaliação da equipe.", False),
-                ("Recompensas", "Cargo especial, carteirinha digital e benefícios exclusivos do programa.", False),
-                ("Candidaturas", f"<#{self.bot.server_map.beta_program_application_channel_id()}>", True),
-                ("Carteirinhas", f"<#{self.bot.server_map.beta_program_card_channel_id()}>", True),
-                ("Cargo", f"<@&{self.bot.server_map.beta_program_role_id()}>", True),
+                ("🎟️ Ingresso", "Somente com código de influencer ativo e com vagas disponíveis.", False),
+                ("📊 Vagas", "Cada código começa com **5 vagas**. Ao esgotar, novas entradas são bloqueadas.", False),
+                ("📝 Como funciona", "Informe o código, preencha a candidatura e aguarde avaliação da equipe.", False),
+                ("🎁 Recompensas", "Cargo especial, carteirinha digital e benefícios exclusivos do programa.", False),
+                ("📨 Candidaturas", f"<#{self.bot.server_map.beta_program_application_channel_id()}>", True),
+                ("🪪 Carteirinhas", f"<#{self.bot.server_map.beta_program_card_channel_id()}>", True),
+                ("🏷️ Cargo", f"<@&{self.bot.server_map.beta_program_role_id()}>", True),
             ],
         )
         footer_icon = self.bot.embeds.footer_icon or self.bot.embeds.guild_icon_url
         if footer_icon:
-            embed.set_footer(text="Drakoria | Beta fechado por convite", icon_url=footer_icon)
+            embed.set_footer(text="Drakoria | Beta fechado por convite 🎟️", icon_url=footer_icon)
         else:
-            embed.set_footer(text="Drakoria | Beta fechado por convite")
+            embed.set_footer(text="Drakoria | Beta fechado por convite 🎟️")
         return embed
 
     async def publish_panel(self, guild: discord.Guild, actor: discord.Member | None = None) -> discord.Message:
@@ -128,9 +130,9 @@ class BetaProgramService:
             if normalized_code:
                 influencer = await self.bot.db.get_beta_influencer_code(interaction.guild.id, normalized_code)
                 if not influencer:
-                    raise RuntimeError("Código de influencer não encontrado. Confira o código e tente novamente.")
+                    raise RuntimeError("❌ Código de influencer não encontrado. Confira o código e tente novamente.")
                 if not int(influencer.get("active", 0)):
-                    raise RuntimeError("Este código de influencer está desativado no momento.")
+                    raise RuntimeError("🚫 Este código de influencer está desativado no momento.")
 
             latest = await self.bot.db.get_latest_beta_tester_application(interaction.guild.id, member.id)
             if latest:
@@ -176,7 +178,7 @@ class BetaProgramService:
 
             if not influencer:
                 raise RuntimeError(
-                    "O Programa Beta está fechado para entrada direta. Use um código válido de influencer para iniciar."
+                    "🎟️ O Programa Beta está fechado para entrada direta. Use um código válido de influencer para iniciar."
                 )
 
             async with self._influencer_code_lock(interaction.guild.id, normalized_code):
@@ -193,8 +195,8 @@ class BetaProgramService:
                     status="in_progress",
                 )
             await self._dispatch_log(
-                title="Candidatura Beta Iniciada",
-                description=f"{member.mention} iniciou candidatura do Programa Beta.",
+            title="🧪 Candidatura Beta Iniciada",
+            description=f"{member.mention} iniciou candidatura do Programa Beta.",
                 color=self.bot.embeds.default_color,
                 fields=[
                     ("Usuário", f"{member}", False),
@@ -206,7 +208,7 @@ class BetaProgramService:
             return BetaStartResult(
                 status="started",
                 application_id=application_id,
-                detail="Candidatura iniciada com sucesso.",
+                detail="✅ Candidatura iniciada com sucesso.",
             )
 
     async def register_influencer_code(
@@ -221,15 +223,15 @@ class BetaProgramService:
     ) -> str:
         normalized = self.normalize_influencer_code(code)
         if not normalized:
-            raise RuntimeError("Informe um código de influencer válido.")
+            raise RuntimeError("❌ Informe um código de influencer válido.")
         if len(normalized) < 3:
-            raise RuntimeError("O código precisa ter pelo menos 3 caracteres.")
+            raise RuntimeError("❌ O código precisa ter pelo menos 3 caracteres.")
         clean_name = influencer_name.strip()[:80]
         if not clean_name:
-            raise RuntimeError("Informe o nome do influencer.")
+            raise RuntimeError("❌ Informe o nome do influencer.")
         resolved_slot_limit = slot_limit if slot_limit is not None else 5
         if resolved_slot_limit < 1 or resolved_slot_limit > 100:
-            raise RuntimeError("A quantidade de vagas precisa ficar entre 1 e 100.")
+            raise RuntimeError("📊 A quantidade de vagas precisa ficar entre 1 e 100.")
         await self.bot.db.upsert_beta_influencer_code(
             guild_id,
             normalized,
@@ -244,10 +246,10 @@ class BetaProgramService:
     async def set_influencer_code_active(self, guild_id: int, code: str, active: bool) -> str:
         normalized = self.normalize_influencer_code(code)
         if not normalized:
-            raise RuntimeError("Informe um código de influencer válido.")
+            raise RuntimeError("❌ Informe um código de influencer válido.")
         changed = await self.bot.db.set_beta_influencer_code_active(guild_id, normalized, active)
         if not changed:
-            raise RuntimeError("Código de influencer não encontrado.")
+            raise RuntimeError("❌ Código de influencer não encontrado.")
         return normalized
 
     async def list_influencer_codes(self, guild_id: int, *, include_inactive: bool = False) -> list[dict[str, Any]]:
@@ -256,10 +258,10 @@ class BetaProgramService:
     async def influencer_code_stats(self, guild_id: int, code: str) -> tuple[dict[str, Any], dict[str, int]]:
         normalized = self.normalize_influencer_code(code)
         if not normalized:
-            raise RuntimeError("Informe um código de influencer válido.")
+            raise RuntimeError("❌ Informe um código de influencer válido.")
         influencer = await self.bot.db.get_beta_influencer_code(guild_id, normalized)
         if not influencer:
-            raise RuntimeError("Código de influencer não encontrado.")
+            raise RuntimeError("❌ Código de influencer não encontrado.")
         stats = await self.bot.db.get_beta_influencer_code_stats(guild_id, normalized)
         return influencer, stats
 
@@ -275,7 +277,7 @@ class BetaProgramService:
         if used_slots >= slot_limit:
             name = str(influencer.get("influencer_name") or "este influencer")
             raise RuntimeError(
-                f"As vagas do código `{normalized_code}` de **{name}** acabaram "
+                f"🚫 As vagas do código `{normalized_code}` de **{name}** acabaram "
                 f"({used_slots}/{slot_limit}). Peça outro código ativo para participar do beta."
             )
 
@@ -321,14 +323,14 @@ class BetaProgramService:
         await self.bot.db.update_beta_tester_application(application_id, {"application_message_id": message.id})
 
         await self._dispatch_log(
-            title="Candidatura Beta Enviada",
+            title="📨 Candidatura Beta Enviada",
             description=f"{member.mention} enviou candidatura para avaliação da equipe.",
             color=self.bot.embeds.default_color,
             fields=[
-                ("Origem", self._referral_label(refreshed), False),
-                ("Candidatura", f"indisponível", True),
-                ("Canal", channel.mention, True),
-                ("Mensagem", f"indisponível", True),
+                ("🎟️ Origem", self._referral_label(refreshed), False),
+                ("🧾 Candidatura", f"indisponível", True),
+                ("📌 Canal", channel.mention, True),
+                ("💬 Mensagem", f"indisponível", True),
             ],
         )
 
@@ -405,15 +407,15 @@ class BetaProgramService:
             )
             await self.refresh_application_message(interaction.guild, application_id)
             await self._dispatch_log(
-                title="Candidatura Beta Aprovada",
+                title="✅ Candidatura Beta Aprovada",
                 description=f"{member.mention} foi aprovado no Programa Beta por {interaction.user.mention}.",
                 color=self.bot.embeds.success_color,
                 fields=[
-                    ("Candidatura", f"indisponível", True),
-                    ("Origem", self._referral_label(application), False),
-                    ("Cargo aplicado", f"{beta_role.mention}", False),
-                    ("DM", dm_status, True),
-                    ("Carteirinha canal", "enviada" if card_sent_channel else "não enviada", True),
+                    ("🧾 Candidatura", f"indisponível", True),
+                    ("🎟️ Origem", self._referral_label(application), False),
+                    ("🏷️ Cargo aplicado", f"{beta_role.mention}", False),
+                    ("📩 DM", dm_status, True),
+                    ("🪪 Carteirinha canal", "enviada" if card_sent_channel else "não enviada", True),
                 ],
             )
             return "Aprovação registrada com sucesso."
@@ -463,7 +465,7 @@ class BetaProgramService:
 
             await self.refresh_application_message(interaction.guild, application_id)
             await self._dispatch_log(
-                title="Candidatura Beta Reprovada",
+                title="⚠️ Candidatura Beta Reprovada",
                 description=f"Candidatura indisponível foi reprovada por {interaction.user.mention}.",
                 color=self.bot.embeds.warning_color,
                 fields=[
@@ -1111,13 +1113,13 @@ class BetaProgramService:
             f"Origem: **{self._referral_label(application)}**"
         )
         embed = self.bot.embeds.make(
-            title="Candidatura Beta Tester",
+            title="🧪 Candidatura Beta Tester",
             description=description,
             fields=[
-                ("Usuário", f"{member.mention if member else f'<@{application['user_id']}>'}", False),
-                ("Criada em", f"`{application.get('created_at')}`", True),
-                ("Enviada em", f"`{application.get('submitted_at') or '-'}`", True),
-                ("Revisada por", f"<@{reviewer}>" if reviewer else "-", True),
+                ("👤 Usuário", f"{member.mention if member else f'<@{application['user_id']}>'}", False),
+                ("🕒 Criada em", f"`{application.get('created_at')}`", True),
+                ("📨 Enviada em", f"`{application.get('submitted_at') or '-'}`", True),
+                ("🛡️ Revisada por", f"<@{reviewer}>" if reviewer else "-", True),
             ],
         )
         for key, label in self.questions():

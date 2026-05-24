@@ -24,8 +24,8 @@ class BetaProgramCog(
         message = await self.bot.beta_program_service.publish_panel(interaction.guild, actor=interaction.user)
         await interaction.followup.send(
             embed=self.bot.embeds.success(
-                "Painel Beta Sincronizado",
-                f"O painel fechado por convite foi publicado em {message.channel.mention}.",
+                "✅ Painel Beta Sincronizado",
+                f"🎟️ O painel fechado por convite e vagas limitadas foi publicado em {message.channel.mention}.",
             ),
             ephemeral=True,
         )
@@ -63,11 +63,11 @@ class BetaProgramCog(
         slot_label = vagas if vagas is not None else 5
         await interaction.followup.send(
             embed=self.bot.embeds.success(
-                "Código de Influencer Salvo",
+                "✅ Código de Influencer Salvo",
                 (
-                    f"Código `{normalized}` vinculado a **{nome.strip()}** ({owner}).\n"
-                    f"Vagas disponíveis: **{slot_label}**.\n"
-                    "Ele já pode ser usado no painel beta."
+                    f"🎟️ Código `{normalized}` vinculado a **{nome.strip()}** ({owner}).\n"
+                    f"📊 Vagas disponíveis: **{slot_label}**.\n"
+                    "🧪 Ele já pode ser usado no painel beta."
                 ),
             ),
             ephemeral=True,
@@ -83,7 +83,7 @@ class BetaProgramCog(
         await interaction.response.defer(ephemeral=True, thinking=True)
         normalized = await self.bot.beta_program_service.set_influencer_code_active(interaction.guild.id, codigo, True)
         await interaction.followup.send(
-            embed=self.bot.embeds.success("Código Ativado", f"O código `{normalized}` voltou a liberar ingresso beta."),
+            embed=self.bot.embeds.success("✅ Código Ativado", f"🎟️ O código `{normalized}` voltou a liberar ingresso beta."),
             ephemeral=True,
         )
 
@@ -97,7 +97,7 @@ class BetaProgramCog(
         await interaction.response.defer(ephemeral=True, thinking=True)
         normalized = await self.bot.beta_program_service.set_influencer_code_active(interaction.guild.id, codigo, False)
         await interaction.followup.send(
-            embed=self.bot.embeds.success("Código Desativado", f"O código `{normalized}` não libera mais ingresso beta."),
+            embed=self.bot.embeds.success("🚫 Código Desativado", f"🎟️ O código `{normalized}` não libera mais ingresso beta."),
             ephemeral=True,
         )
 
@@ -115,7 +115,7 @@ class BetaProgramCog(
             include_inactive=incluir_inativos,
         )
         if not rows:
-            description = "Nenhum código de influencer cadastrado."
+            description = "📭 Nenhum código de influencer cadastrado."
         else:
             lines = []
             for row in rows[:20]:
@@ -125,14 +125,14 @@ class BetaProgramCog(
                 slot_limit = int(row.get("slot_limit") or 5)
                 used_slots = int(stats.get("total", 0))
                 lines.append(
-                    f"`{row['code']}` - **{row['influencer_name']}** ({status}) "
-                    f"| vagas: **{used_slots}/{slot_limit}**{owner}"
+                    f"🎟️ `{row['code']}` - **{row['influencer_name']}** ({status}) "
+                    f"| 📊 vagas: **{used_slots}/{slot_limit}**{owner}"
                 )
             description = "\n".join(lines)
             if len(rows) > len(lines):
                 description += f"\n... e mais {len(rows) - len(lines)} código(s)."
         await interaction.followup.send(
-            embed=self.bot.embeds.make(title="Influencers Beta", description=description),
+            embed=self.bot.embeds.make(title="🎟️ Influencers Beta", description=description),
             ephemeral=True,
         )
 
@@ -146,18 +146,18 @@ class BetaProgramCog(
         await interaction.response.defer(ephemeral=True, thinking=True)
         influencer, stats = await self.bot.beta_program_service.influencer_code_stats(interaction.guild.id, codigo)
         description = (
-            f"Influencer: **{influencer['influencer_name']}**\n"
-            f"Código: `{influencer['code']}`\n"
-            f"Status: **{'ativo' if int(influencer.get('active', 0)) else 'inativo'}**\n\n"
-            f"Vagas usadas: **{stats['total']}/{int(influencer.get('slot_limit') or 5)}**\n"
-            f"Total: **{stats['total']}**\n"
-            f"Em andamento: **{stats['in_progress']}**\n"
-            f"Pendentes: **{stats['pending']}**\n"
-            f"Aprovadas: **{stats['approved']}**\n"
-            f"Reprovadas: **{stats['rejected']}**"
+            f"👤 Influencer: **{influencer['influencer_name']}**\n"
+            f"🎟️ Código: `{influencer['code']}`\n"
+            f"📌 Status: **{'ativo' if int(influencer.get('active', 0)) else 'inativo'}**\n\n"
+            f"📊 Vagas usadas: **{stats['total']}/{int(influencer.get('slot_limit') or 5)}**\n"
+            f"🧾 Total: **{stats['total']}**\n"
+            f"📝 Em andamento: **{stats['in_progress']}**\n"
+            f"⏳ Pendentes: **{stats['pending']}**\n"
+            f"✅ Aprovadas: **{stats['approved']}**\n"
+            f"🚫 Reprovadas: **{stats['rejected']}**"
         )
         await interaction.followup.send(
-            embed=self.bot.embeds.make(title="Estatísticas do Influencer", description=description),
+            embed=self.bot.embeds.make(title="📊 Estatísticas do Influencer", description=description),
             ephemeral=True,
         )
 
