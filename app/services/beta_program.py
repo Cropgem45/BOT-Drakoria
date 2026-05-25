@@ -35,6 +35,8 @@ class TesterCardData:
 
 
 class BetaProgramService:
+    INFLUENCER_INVITE_LIMIT = 5
+
     def __init__(self, bot: Any) -> None:
         self.bot = bot
         self._user_locks: dict[int, asyncio.Lock] = {}
@@ -50,16 +52,16 @@ class BetaProgramService:
             "🧪 O Programa Oficial de Beta Testers do Drakoria está em fase fechada por convite.\n\n"
             "🎟️ Nesta etapa, novas candidaturas só são abertas para pessoas que chegaram por uma campanha "
             "de influencer parceiro e possuem um código válido de ingresso.\n\n"
-            "📌 Cada influencer possui **5 vagas por padrão**. Quando as vagas de um código acabarem, "
-            "ele deixa de liberar novas entradas automaticamente.\n\n"
+            "📌 Cada influencer possui **5 convites individuais**. Cada código libera **1 vaga** "
+            "e só pode ser usado **uma única vez**.\n\n"
             "✅ Se você recebeu um código, use o botão abaixo para vinculá-lo à sua candidatura."
         )
         embed = self.bot.embeds.make(
             title="🧪 Programa Beta Tester | Acesso por Convite",
             description=description,
             fields=[
-                ("🎟️ Ingresso", "Somente com código de influencer ativo e com vagas disponíveis.", False),
-                ("📊 Vagas", "Cada código começa com **5 vagas**. Ao esgotar, novas entradas são bloqueadas.", False),
+                ("🎟️ Ingresso", "Somente com código individual de influencer ativo.", False),
+                ("📊 Vagas", "Cada código vale **1 vaga**. O influencer pode gerar até **5 convites**.", False),
                 ("📝 Como funciona", "Informe o código, preencha a candidatura e aguarde avaliação da equipe.", False),
                 ("🎁 Recompensas", "Cargo especial, carteirinha digital e benefícios exclusivos do programa.", False),
                 ("📨 Candidaturas", f"<#{self.bot.server_map.beta_program_application_channel_id()}>", True),
@@ -253,6 +255,46 @@ class BetaProgramService:
             active=True,
         )
         return normalized
+
+    async def generate_single_use_influencer_code(
+        self,
+        guild_id: int,
+        *,
+        influencer_name: str,
+        owner_user_id: int | None,
+        created_by_id: int | None,
+    ) -> dict[str, Any]:
+        clean_name = influencer_name.strip()[:80]
+        if not clean_name:
+            raise RuntimeError("❌ Informe o nome do influencer.")
+        quota = await self.bot.db.get_beta_influencer_owner_quota(
+            guild_id,
+            owner_user_id=owner_user_id,
+            influencer_name=clean_name,
+        )
+        reserved = int(quota["used_codes"]) + int(quota["pending_codes"])
+        if reserved >= self.INFLUENCER_INVITE_LIMIT:
+            raise RuntimeError(
+                "🚫 Este influencer já possui 5 convites beta gerados/ocupados. "
+                "Use ou desative um código pendente antes de gerar outro."
+            )
+        code = await self.register_influencer_code(
+            guild_id,
+            code=None,
+            influencer_name=clean_name,
+            owner_user_id=owner_user_id,
+            created_by_id=created_by_id,
+            slot_limit=1,
+        )
+        remaining = max(self.INFLUENCER_INVITE_LIMIT - reserved - 1, 0)
+        return {
+            "code": code,
+            "slot_limit": 1,
+            "remaining": remaining,
+            "used_codes": int(quota["used_codes"]),
+            "pending_codes": int(quota["pending_codes"]) + 1,
+            "limit": self.INFLUENCER_INVITE_LIMIT,
+        }
 
     async def generate_unique_influencer_code(self, guild_id: int) -> str:
         alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

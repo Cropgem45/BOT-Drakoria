@@ -15,7 +15,7 @@ Referencia dos comandos ativos no fechamento.
 ## /beta_program
 
 - `publicar_painel`: publica/sincroniza painel fechado do programa beta.
-- `gerar_codigo`: atalho administrativo dentro do grupo beta; tambem existe como comando de topo `/gerar_codigo`.
+- `gerar_codigo`: atalho administrativo dentro do grupo beta; tambem existe como comando de topo `/gerar_codigo`. Todo codigo gerado vale 1 uso.
 - `ativar_influencer`: reativa um codigo de influencer.
 - `desativar_influencer`: desativa um codigo de influencer.
 - `resetar_vagas`: zera as vagas usadas de um codigo ou de todos os influencers.
@@ -24,7 +24,7 @@ Referencia dos comandos ativos no fechamento.
 
 ## /gerar_codigo
 
-- Exclusivo do cargo Criador de Conteudo (`1487647366327570574`); gera codigo aleatorio e unico de influencer para ingresso beta. Cada usuario pode usar o mesmo codigo apenas 1 vez, e cada uso baixa 1 vaga do codigo.
+- Exclusivo do cargo Criador de Conteudo (`1487647366327570574`); gera codigo individual e unico de influencer para ingresso beta. Cada codigo vale 1 pessoa, 1 unica vez. Cada influencer pode manter ate 5 convites gerados/ocupados.
 
 ## /ticket
 

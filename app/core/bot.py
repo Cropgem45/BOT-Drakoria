@@ -289,32 +289,28 @@ class DrakoriaBot(commands.Bot):
                 usuario = await interaction.guild.fetch_member(int(options["usuario"]))
             except (TypeError, ValueError, discord.HTTPException):
                 usuario = None
-        vagas = None
-        if options.get("vagas") is not None:
-            try:
-                vagas = int(options["vagas"])
-            except (TypeError, ValueError):
-                raise RuntimeError("A quantidade de vagas precisa ser um número válido.")
+        owner = usuario or interaction.user
 
-        normalized = await self.beta_program_service.register_influencer_code(
+        result = await self.beta_program_service.generate_single_use_influencer_code(
             interaction.guild.id,
-            code=None,
             influencer_name=nome,
-            owner_user_id=usuario.id if usuario else None,
+            owner_user_id=owner.id,
             created_by_id=interaction.user.id,
-            slot_limit=vagas,
         )
-        owner = usuario.mention if usuario else "sem usuário vinculado"
-        slot_label = vagas if vagas is not None else 5
-        await interaction.followup.send(
-            embed=self.embeds.success(
-                "✅ Código de Influencer Salvo",
-                (
-                    f"🎟️ Código aleatório `{normalized}` vinculado a **{nome}** ({owner}).\n"
-                    f"📊 Vagas disponíveis: **{slot_label}**.\n"
-                    "🧪 Entregue esse código só para quem ganhou a vaga. Para convite individual, use 1 vaga."
-                ),
+        embed = discord.Embed(
+            title="✅ Código Individual Gerado",
+            description=(
+                f"🎟️ Código: `{result['code']}`\n"
+                f"👤 Influencer: **{nome}** ({owner.mention})\n"
+                "📌 Uso: **1 pessoa, 1 única vez**\n"
+                f"📊 Convites restantes para gerar: **{int(result['remaining'])}/5**"
             ),
+            color=self.embeds.success_color,
+        )
+        embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+        embed.set_footer(text="Drakoria | Convite beta individual")
+        await interaction.followup.send(
+            embed=embed,
             ephemeral=True,
         )
 

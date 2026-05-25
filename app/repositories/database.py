@@ -1828,6 +1828,41 @@ class Database:
             await conn.close()
         return row is not None
 
+    async def get_beta_influencer_owner_quota(
+        self,
+        guild_id: int,
+        *,
+        owner_user_id: int | None,
+        influencer_name: str,
+    ) -> dict[str, int]:
+        if owner_user_id is not None:
+            where = "guild_id = ? AND owner_user_id = ?"
+            params: tuple[Any, ...] = (guild_id, owner_user_id)
+        else:
+            where = "guild_id = ? AND owner_user_id IS NULL AND influencer_name = ? COLLATE NOCASE"
+            params = (guild_id, influencer_name)
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                f"""
+                SELECT
+                    COUNT(*) AS total_codes,
+                    SUM(CASE WHEN slot_used > 0 THEN 1 ELSE 0 END) AS used_codes,
+                    SUM(CASE WHEN active = 1 AND slot_used = 0 THEN 1 ELSE 0 END) AS pending_codes
+                FROM beta_influencer_codes
+                WHERE {where}
+                """,
+                params,
+            )
+        finally:
+            await conn.close()
+        return {
+            "total_codes": int(row["total_codes"] or 0) if row else 0,
+            "used_codes": int(row["used_codes"] or 0) if row else 0,
+            "pending_codes": int(row["pending_codes"] or 0) if row else 0,
+        }
+
     async def set_beta_influencer_code_active(self, guild_id: int, code: str, active: bool) -> bool:
         conn = await self.connect()
         try:

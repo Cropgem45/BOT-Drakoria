@@ -14,6 +14,30 @@ async def can_generate_beta_code(bot: commands.Bot, interaction: discord.Interac
     return bool(await checker(interaction, "generate_beta_code"))
 
 
+def build_generated_code_embed(
+    bot: commands.Bot,
+    *,
+    interaction: discord.Interaction,
+    code: str,
+    influencer_name: str,
+    owner: discord.Member | discord.User,
+    remaining: int,
+) -> discord.Embed:
+    embed = discord.Embed(
+        title="✅ Código Individual Gerado",
+        description=(
+            f"🎟️ Código: `{code}`\n"
+            f"👤 Influencer: **{influencer_name.strip()}** ({owner.mention})\n"
+            "📌 Uso: **1 pessoa, 1 única vez**\n"
+            f"📊 Convites restantes para gerar: **{remaining}/5**"
+        ),
+        color=bot.embeds.success_color,
+    )
+    embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+    embed.set_footer(text="Drakoria | Convite beta individual")
+    return embed
+
+
 class BetaProgramCog(
     commands.GroupCog,
     group_name="beta_program",
@@ -45,50 +69,44 @@ class BetaProgramCog(
         *,
         nome: str,
         usuario: discord.Member | None = None,
-        vagas: int | None = None,
     ) -> None:
         if not interaction.guild:
             raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
         if not await can_generate_beta_code(self.bot, interaction):
             raise app_commands.CheckFailure("Apenas Criadores de Conteúdo podem gerar códigos beta.")
         await interaction.response.defer(ephemeral=True, thinking=True)
-        normalized = await self.bot.beta_program_service.register_influencer_code(
+        owner = usuario or interaction.user
+        result = await self.bot.beta_program_service.generate_single_use_influencer_code(
             interaction.guild.id,
-            code=None,
             influencer_name=nome,
-            owner_user_id=usuario.id if usuario else None,
+            owner_user_id=owner.id,
             created_by_id=interaction.user.id,
-            slot_limit=vagas,
         )
-        owner = usuario.mention if usuario else "sem usuário vinculado"
-        slot_label = vagas if vagas is not None else 5
         await interaction.followup.send(
-            embed=self.bot.embeds.success(
-                "✅ Código de Influencer Salvo",
-                (
-                    f"🎟️ Código aleatório `{normalized}` vinculado a **{nome.strip()}** ({owner}).\n"
-                    f"📊 Vagas disponíveis: **{slot_label}**.\n"
-                    "🧪 Entregue esse código só para quem ganhou a vaga. Para convite individual, use 1 vaga."
-                ),
+            embed=build_generated_code_embed(
+                self.bot,
+                interaction=interaction,
+                code=str(result["code"]),
+                influencer_name=nome,
+                owner=owner,
+                remaining=int(result["remaining"]),
             ),
             ephemeral=True,
         )
 
-    @app_commands.command(name="gerar_codigo", description="Gera um código aleatório de beta para influencer ou sorteio")
+    @app_commands.command(name="gerar_codigo", description="Gera um código individual de ingresso beta")
     @app_commands.guild_only()
     @app_commands.describe(
         nome="Nome público do influencer ou campanha",
         usuario="Usuário Discord do influencer, se estiver no servidor",
-        vagas="Quantidade de vagas disponíveis; use 1 para convite individual",
     )
     async def gerar_codigo(
         self,
         interaction: discord.Interaction,
         nome: str,
         usuario: discord.Member | None = None,
-        vagas: int | None = None,
     ) -> None:
-        await self._send_generated_influencer_code(interaction, nome=nome, usuario=usuario, vagas=vagas)
+        await self._send_generated_influencer_code(interaction, nome=nome, usuario=usuario)
 
     async def _handle_cadastrar_influencer_raw(self, interaction: discord.Interaction) -> bool:
         if not interaction.guild:
@@ -104,31 +122,26 @@ class BetaProgramCog(
         if not nome:
             raise RuntimeError("Informe o nome público do influencer.")
 
-        vagas_value = options.get("vagas")
-        vagas = int(vagas_value) if vagas_value is not None else None
         usuario = await self._resolve_raw_member(interaction.guild, options.get("usuario"))
 
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True, thinking=True)
 
-        normalized = await self.bot.beta_program_service.register_influencer_code(
+        owner = usuario or interaction.user
+        result = await self.bot.beta_program_service.generate_single_use_influencer_code(
             interaction.guild.id,
-            code=None,
             influencer_name=nome,
-            owner_user_id=usuario.id if usuario else None,
+            owner_user_id=owner.id,
             created_by_id=interaction.user.id,
-            slot_limit=vagas,
         )
-        owner = usuario.mention if usuario else "sem usuário vinculado"
-        slot_label = vagas if vagas is not None else 5
         await interaction.followup.send(
-            embed=self.bot.embeds.success(
-                "✅ Código de Influencer Salvo",
-                (
-                    f"🎟️ Código aleatório `{normalized}` vinculado a **{nome}** ({owner}).\n"
-                    f"📊 Vagas disponíveis: **{slot_label}**.\n"
-                    "🧪 Entregue esse código só para quem ganhou a vaga. Para convite individual, use 1 vaga."
-                ),
+            embed=build_generated_code_embed(
+                self.bot,
+                interaction=interaction,
+                code=str(result["code"]),
+                influencer_name=nome,
+                owner=owner,
+                remaining=int(result["remaining"]),
             ),
             ephemeral=True,
         )
@@ -413,43 +426,38 @@ class BetaCreatorCodeCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="gerar_codigo", description="Gera um código aleatório de ingresso beta")
+    @app_commands.command(name="gerar_codigo", description="Gera um código individual de ingresso beta")
     @app_commands.guild_only()
     @app_commands.describe(
         nome="Nome público do influencer ou campanha",
         usuario="Usuário Discord do influencer, se estiver no servidor",
-        vagas="Quantidade de vagas disponíveis; use 1 para convite individual",
     )
     async def gerar_codigo(
         self,
         interaction: discord.Interaction,
         nome: str,
         usuario: discord.Member | None = None,
-        vagas: int | None = None,
     ) -> None:
         if not interaction.guild:
             raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
         if not await can_generate_beta_code(self.bot, interaction):
             raise app_commands.CheckFailure("Apenas Criadores de Conteúdo podem gerar códigos beta.")
         await interaction.response.defer(ephemeral=True, thinking=True)
-        normalized = await self.bot.beta_program_service.register_influencer_code(
+        owner = usuario or interaction.user
+        result = await self.bot.beta_program_service.generate_single_use_influencer_code(
             interaction.guild.id,
-            code=None,
             influencer_name=nome,
-            owner_user_id=usuario.id if usuario else None,
+            owner_user_id=owner.id,
             created_by_id=interaction.user.id,
-            slot_limit=vagas,
         )
-        owner = usuario.mention if usuario else "sem usuário vinculado"
-        slot_label = vagas if vagas is not None else 5
         await interaction.followup.send(
-            embed=self.bot.embeds.success(
-                "✅ Código de Influencer Salvo",
-                (
-                    f"🎟️ Código aleatório `{normalized}` vinculado a **{nome.strip()}** ({owner}).\n"
-                    f"📊 Vagas disponíveis: **{slot_label}**.\n"
-                    "🧪 Entregue esse código só para quem ganhou a vaga. Para convite individual, use 1 vaga."
-                ),
+            embed=build_generated_code_embed(
+                self.bot,
+                interaction=interaction,
+                code=str(result["code"]),
+                influencer_name=nome,
+                owner=owner,
+                remaining=int(result["remaining"]),
             ),
             ephemeral=True,
         )
