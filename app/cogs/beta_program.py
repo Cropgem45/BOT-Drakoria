@@ -254,11 +254,11 @@ class BetaProgramCog(
             for row in rows[:20]:
                 owner = f" | <@{row['owner_user_id']}>" if row.get("owner_user_id") else ""
                 status = "ativo" if int(row.get("active", 0)) else "inativo"
-                slot_limit = int(row.get("slot_limit") or 5)
                 used_slots = int(row.get("slot_used") or 0)
+                usage = "usado" if used_slots > 0 else "pendente"
                 lines.append(
                     f"🎟️ `{row['code']}` - **{row['influencer_name']}** ({status}) "
-                    f"| 📊 vagas: **{used_slots}/{slot_limit}**{owner}"
+                    f"| 📌 **{usage}**{owner}"
                 )
             description = "\n".join(lines)
             if len(rows) > len(lines):
@@ -281,7 +281,7 @@ class BetaProgramCog(
             f"👤 Influencer: **{influencer['influencer_name']}**\n"
             f"🎟️ Código: `{influencer['code']}`\n"
             f"📌 Status: **{'ativo' if int(influencer.get('active', 0)) else 'inativo'}**\n\n"
-            f"📊 Vagas usadas: **{int(influencer.get('slot_used') or 0)}/{int(influencer.get('slot_limit') or 5)}**\n"
+            f"📊 Uso do código: **{'usado' if int(influencer.get('slot_used') or 0) > 0 else 'pendente'}**\n"
             f"🧾 Total: **{stats['total']}**\n"
             f"📝 Em andamento: **{stats['in_progress']}**\n"
             f"⏳ Pendentes: **{stats['pending']}**\n"

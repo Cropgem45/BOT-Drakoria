@@ -348,13 +348,17 @@ class BetaProgramService:
             return
         refreshed = await self.bot.db.get_beta_influencer_code(guild_id, normalized_code) or influencer
         used_slots = int(refreshed.get("slot_used") or 0)
-        slot_limit = int(refreshed.get("slot_limit") or 5)
         if not int(refreshed.get("active", 0)):
             raise RuntimeError("🚫 Este código de influencer está desativado no momento.")
         name = str(refreshed.get("influencer_name") or "este influencer")
+        if used_slots > 0:
+            raise RuntimeError(
+                f"🚫 O código `{normalized_code}` de **{name}** já foi usado. "
+                "Peça ao influencer um novo código individual para participar do beta."
+            )
         raise RuntimeError(
-            f"🚫 As vagas do código `{normalized_code}` de **{name}** acabaram "
-            f"({used_slots}/{slot_limit}). Peça outro código ativo para participar do beta."
+            f"🚫 O código `{normalized_code}` de **{name}** não possui vaga disponível. "
+            "Peça outro código ativo para participar do beta."
         )
 
     async def save_step_answers(self, application_id: int, step: str, answers: dict[str, str]) -> None:

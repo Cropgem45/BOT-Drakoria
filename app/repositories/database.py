@@ -1891,7 +1891,7 @@ class Database:
                 WHERE guild_id = ?
                   AND code = ?
                   AND active = 1
-                  AND slot_used < slot_limit
+                  AND slot_used = 0
                 """,
                 (guild_id, code),
             )
