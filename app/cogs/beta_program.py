@@ -82,6 +82,7 @@ class BetaProgramCog(
             owner_user_id=owner.id,
             created_by_id=interaction.user.id,
         )
+        await self.bot.beta_program_service.publish_quota_panel(interaction.guild)
         await interaction.followup.send(
             embed=build_generated_code_embed(
                 self.bot,
@@ -98,7 +99,7 @@ class BetaProgramCog(
     @app_commands.guild_only()
     @app_commands.describe(
         nome="Nome público do influencer ou campanha",
-        usuario="Usuário Discord do influencer, se estiver no servidor",
+        usuario="Marque o influencer; se vazio, usa você como dono das 5 vagas",
     )
     async def gerar_codigo(
         self,
@@ -134,6 +135,7 @@ class BetaProgramCog(
             owner_user_id=owner.id,
             created_by_id=interaction.user.id,
         )
+        await self.bot.beta_program_service.publish_quota_panel(interaction.guild)
         await interaction.followup.send(
             embed=build_generated_code_embed(
                 self.bot,
@@ -193,6 +195,7 @@ class BetaProgramCog(
             raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
         await interaction.response.defer(ephemeral=True, thinking=True)
         normalized = await self.bot.beta_program_service.set_influencer_code_active(interaction.guild.id, codigo, True)
+        await self.bot.beta_program_service.publish_quota_panel(interaction.guild)
         await interaction.followup.send(
             embed=self.bot.embeds.success("✅ Código Ativado", f"🎟️ O código `{normalized}` voltou a liberar ingresso beta."),
             ephemeral=True,
@@ -207,6 +210,7 @@ class BetaProgramCog(
             raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
         await interaction.response.defer(ephemeral=True, thinking=True)
         normalized = await self.bot.beta_program_service.set_influencer_code_active(interaction.guild.id, codigo, False)
+        await self.bot.beta_program_service.publish_quota_panel(interaction.guild)
         await interaction.followup.send(
             embed=self.bot.embeds.success("🚫 Código Desativado", f"🎟️ O código `{normalized}` não libera mais ingresso beta."),
             ephemeral=True,
@@ -225,6 +229,7 @@ class BetaProgramCog(
             interaction.guild.id,
             codigo,
         )
+        await self.bot.beta_program_service.publish_quota_panel(interaction.guild)
         if normalized:
             description = f"🔄 As vagas usadas do código `{normalized}` foram zeradas."
         else:
@@ -430,7 +435,7 @@ class BetaCreatorCodeCog(commands.Cog):
     @app_commands.guild_only()
     @app_commands.describe(
         nome="Nome público do influencer ou campanha",
-        usuario="Usuário Discord do influencer, se estiver no servidor",
+        usuario="Marque o influencer; se vazio, usa você como dono das 5 vagas",
     )
     async def gerar_codigo(
         self,
@@ -450,6 +455,7 @@ class BetaCreatorCodeCog(commands.Cog):
             owner_user_id=owner.id,
             created_by_id=interaction.user.id,
         )
+        await self.bot.beta_program_service.publish_quota_panel(interaction.guild)
         await interaction.followup.send(
             embed=build_generated_code_embed(
                 self.bot,

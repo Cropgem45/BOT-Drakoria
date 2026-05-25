@@ -27,6 +27,7 @@ class Database:
         "registration_records",
         "member_registration_sessions",
         "beta_program_panel_state",
+        "beta_quota_panel_state",
         "beta_influencer_codes",
         "beta_tester_applications",
     )
@@ -277,6 +278,13 @@ class Database:
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
+                CREATE TABLE IF NOT EXISTS beta_quota_panel_state (
+                    guild_id INTEGER PRIMARY KEY,
+                    channel_id INTEGER NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
                 CREATE TABLE IF NOT EXISTS beta_influencer_codes (
                     guild_id INTEGER NOT NULL,
                     code TEXT NOT NULL,
@@ -415,6 +423,13 @@ class Database:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (guild_id, code)
+            );
+
+            CREATE TABLE IF NOT EXISTS beta_quota_panel_state (
+                guild_id INTEGER PRIMARY KEY,
+                channel_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
@@ -1712,6 +1727,31 @@ class Database:
             await conn.close()
         return dict(row) if row else None
 
+    async def save_beta_quota_panel_message(self, guild_id: int, channel_id: int, message_id: int) -> None:
+        await self._run_write(
+            """
+            INSERT INTO beta_quota_panel_state (guild_id, channel_id, message_id, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                channel_id = excluded.channel_id,
+                message_id = excluded.message_id,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (guild_id, channel_id, message_id),
+        )
+
+    async def get_beta_quota_panel_message(self, guild_id: int) -> dict[str, Any] | None:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                "SELECT * FROM beta_quota_panel_state WHERE guild_id = ?",
+                (guild_id,),
+            )
+        finally:
+            await conn.close()
+        return dict(row) if row else None
+
     async def create_beta_tester_application(
         self,
         guild_id: int,
@@ -1863,6 +1903,30 @@ class Database:
             "pending_codes": int(row["pending_codes"] or 0) if row else 0,
         }
 
+    async def list_beta_influencer_owner_quotas(self, guild_id: int) -> list[dict[str, Any]]:
+        conn = await self.connect()
+        try:
+            rows = await self.fetchall(
+                conn,
+                """
+                SELECT
+                    COALESCE(CAST(owner_user_id AS TEXT), influencer_name) AS quota_key,
+                    owner_user_id,
+                    influencer_name,
+                    COUNT(*) AS total_codes,
+                    SUM(CASE WHEN slot_used > 0 THEN 1 ELSE 0 END) AS used_codes,
+                    SUM(CASE WHEN active = 1 AND slot_used = 0 THEN 1 ELSE 0 END) AS pending_codes
+                FROM beta_influencer_codes
+                WHERE guild_id = ?
+                GROUP BY quota_key
+                ORDER BY used_codes DESC, pending_codes DESC, influencer_name COLLATE NOCASE ASC
+                """,
+                (guild_id,),
+            )
+        finally:
+            await conn.close()
+        return [dict(row) for row in rows]
+
     async def set_beta_influencer_code_active(self, guild_id: int, code: str, active: bool) -> bool:
         conn = await self.connect()
         try:
@@ -1881,7 +1945,7 @@ class Database:
             await conn.close()
         return changed
 
-    async def try_consume_beta_influencer_slot(self, guild_id: int, code: str) -> bool:
+    async def try_consume_beta_influencer_slot(self, guild_id: int, code: str, owner_limit: int = 5) -> bool:
         conn = await self.connect()
         try:
             cursor = await conn.execute(
@@ -1892,8 +1956,25 @@ class Database:
                   AND code = ?
                   AND active = 1
                   AND slot_used = 0
+                  AND (
+                    SELECT COUNT(*)
+                    FROM beta_influencer_codes AS used
+                    WHERE used.guild_id = beta_influencer_codes.guild_id
+                      AND used.slot_used > 0
+                      AND (
+                        (
+                          beta_influencer_codes.owner_user_id IS NOT NULL
+                          AND used.owner_user_id = beta_influencer_codes.owner_user_id
+                        )
+                        OR (
+                          beta_influencer_codes.owner_user_id IS NULL
+                          AND used.owner_user_id IS NULL
+                          AND used.influencer_name COLLATE NOCASE = beta_influencer_codes.influencer_name COLLATE NOCASE
+                        )
+                      )
+                  ) < ?
                 """,
-                (guild_id, code),
+                (guild_id, code, owner_limit),
             )
             await conn.commit()
             consumed = cursor.rowcount > 0

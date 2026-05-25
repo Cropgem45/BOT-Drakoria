@@ -21,10 +21,11 @@ Referencia dos comandos ativos no fechamento.
 - `resetar_vagas`: zera as vagas usadas de um codigo ou de todos os influencers.
 - `listar_influencers`: lista os codigos de influencer cadastrados e vagas usadas.
 - `stats_influencer`: mostra estatisticas de candidaturas por codigo.
+- Painel de vagas: o bot mantém a sala `vagas-beta` (`1508552344923799803`) atualizada com usadas/pendentes/restantes por influencer.
 
 ## /gerar_codigo
 
-- Exclusivo do cargo Criador de Conteudo (`1487647366327570574`); gera codigo individual e unico de influencer para ingresso beta. Cada codigo vale 1 pessoa, 1 unica vez. Cada influencer pode manter ate 5 convites gerados/ocupados.
+- Exclusivo do cargo Criador de Conteudo (`1487647366327570574`); gera codigo individual e unico de influencer para ingresso beta. Cada codigo vale 1 pessoa, 1 unica vez. O limite de 5 vagas e por influencer marcado/dono do codigo.
 
 ## /ticket
 

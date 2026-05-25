@@ -120,6 +120,7 @@ class DrakoriaBot(commands.Bot):
             try:
                 if self.server_map.beta_program_enabled():
                     await self.beta_program_service.publish_panel(guild)
+                    await self.beta_program_service.publish_quota_panel(guild)
             except Exception:
                 self.log.exception("Falha ao sincronizar painel do programa beta no on_ready.")
             try:
@@ -297,6 +298,7 @@ class DrakoriaBot(commands.Bot):
             owner_user_id=owner.id,
             created_by_id=interaction.user.id,
         )
+        await self.beta_program_service.publish_quota_panel(interaction.guild)
         embed = discord.Embed(
             title="✅ Código Individual Gerado",
             description=(

@@ -36,6 +36,7 @@ class TesterCardData:
 
 class BetaProgramService:
     INFLUENCER_INVITE_LIMIT = 5
+    QUOTA_CHANNEL_ID = 1508552344923799803
 
     def __init__(self, bot: Any) -> None:
         self.bot = bot
@@ -113,6 +114,67 @@ class BetaProgramService:
             )
         return message
 
+    async def refresh_quota_panel_for_guild_id(self, guild_id: int) -> None:
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return
+        await self.publish_quota_panel(guild)
+
+    async def publish_quota_panel(self, guild: discord.Guild) -> discord.Message | None:
+        channel = guild.get_channel(self.QUOTA_CHANNEL_ID)
+        if not isinstance(channel, discord.TextChannel):
+            self.bot.log.warning("Canal vagas-beta nao encontrado: %s", self.QUOTA_CHANNEL_ID)
+            return None
+
+        embed = await self.build_quota_panel_embed(guild)
+        state = await self.bot.db.get_beta_quota_panel_message(guild.id)
+        message: discord.Message | None = None
+        if state:
+            saved_channel = guild.get_channel(int(state["channel_id"]))
+            if isinstance(saved_channel, discord.TextChannel):
+                try:
+                    message = await saved_channel.fetch_message(int(state["message_id"]))
+                    await message.edit(embed=embed)
+                except discord.NotFound:
+                    message = None
+
+        if message is None:
+            message = await channel.send(embed=embed)
+        await self.bot.db.save_beta_quota_panel_message(guild.id, channel.id, message.id)
+        return message
+
+    async def build_quota_panel_embed(self, guild: discord.Guild) -> discord.Embed:
+        rows = await self.bot.db.list_beta_influencer_owner_quotas(guild.id)
+        if not rows:
+            description = "Nenhum convite beta de influencer foi gerado ainda."
+        else:
+            lines: list[str] = []
+            for row in rows[:25]:
+                owner_id = row.get("owner_user_id")
+                name = str(row.get("influencer_name") or "Influencer")
+                used = int(row.get("used_codes") or 0)
+                pending = int(row.get("pending_codes") or 0)
+                remaining = max(self.INFLUENCER_INVITE_LIMIT - used - pending, 0)
+                owner_label = f"<@{owner_id}>" if owner_id else name
+                status = "esgotado" if used >= self.INFLUENCER_INVITE_LIMIT else "ativo"
+                lines.append(
+                    f"**{owner_label}** | {status}\n"
+                    f"Usadas: **{used}/{self.INFLUENCER_INVITE_LIMIT}** | "
+                    f"Pendentes: **{pending}** | Restantes para gerar: **{remaining}**"
+                )
+            description = "\n\n".join(lines)
+            if len(rows) > 25:
+                description += f"\n\n... e mais {len(rows) - 25} influencer(s)."
+
+        embed = discord.Embed(
+            title="📊 Vagas Beta por Influencer",
+            description=description,
+            color=self.bot.embeds.default_color,
+        )
+        embed.set_footer(text="Drakoria | Atualiza automaticamente ao gerar ou usar códigos")
+        embed.timestamp = datetime.now(UTC)
+        return embed
+
     async def start_or_resume_application(
         self,
         interaction: discord.Interaction,
@@ -167,6 +229,7 @@ class BetaProgramService:
                                     else None,
                                 },
                             )
+                            await self.publish_quota_panel(interaction.guild)
                     return BetaStartResult(
                         status="resume",
                         application_id=int(latest["id"]),
@@ -207,6 +270,7 @@ class BetaProgramService:
                     influencer_owner_id=int(influencer["owner_user_id"]) if influencer and influencer.get("owner_user_id") else None,
                     status="in_progress",
                 )
+            await self.publish_quota_panel(interaction.guild)
             await self._dispatch_log(
                 title="🧪 Candidatura Beta Iniciada",
                 description=f"{member.mention} iniciou candidatura do Programa Beta.",
@@ -343,7 +407,11 @@ class BetaProgramService:
         normalized_code: str,
         influencer: dict[str, Any],
     ) -> None:
-        consumed = await self.bot.db.try_consume_beta_influencer_slot(guild_id, normalized_code)
+        consumed = await self.bot.db.try_consume_beta_influencer_slot(
+            guild_id,
+            normalized_code,
+            owner_limit=self.INFLUENCER_INVITE_LIMIT,
+        )
         if consumed:
             return
         refreshed = await self.bot.db.get_beta_influencer_code(guild_id, normalized_code) or influencer
@@ -351,6 +419,16 @@ class BetaProgramService:
         if not int(refreshed.get("active", 0)):
             raise RuntimeError("🚫 Este código de influencer está desativado no momento.")
         name = str(refreshed.get("influencer_name") or "este influencer")
+        quota = await self.bot.db.get_beta_influencer_owner_quota(
+            guild_id,
+            owner_user_id=int(refreshed["owner_user_id"]) if refreshed.get("owner_user_id") else None,
+            influencer_name=name,
+        )
+        if int(quota.get("used_codes") or 0) >= self.INFLUENCER_INVITE_LIMIT:
+            raise RuntimeError(
+                f"🚫 As 5 vagas de **{name}** já foram consumidas. "
+                "Nenhum código deste influencer pode liberar novas entradas."
+            )
         if used_slots > 0:
             raise RuntimeError(
                 f"🚫 O código `{normalized_code}` de **{name}** já foi usado. "
