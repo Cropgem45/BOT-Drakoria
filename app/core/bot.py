@@ -170,6 +170,22 @@ class DrakoriaBot(commands.Bot):
 
     async def _on_tree_error(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError) -> None:
         root_error = getattr(error, "original", error)
+        data = interaction.data if isinstance(interaction.data, dict) else {}
+        raw_name = str(data.get("name") or "")
+        if isinstance(root_error, discord.app_commands.CommandSignatureMismatch):
+            command_name = str(getattr(getattr(interaction, "command", None), "name", "") or "")
+            raw_subcommand = ""
+            for option in data.get("options") or []:
+                if isinstance(option, dict) and option.get("type") in {1, 2}:
+                    raw_subcommand = str(option.get("name") or "")
+                    break
+            if command_name == "cadastrar_influencer" or (raw_name == "beta_program" and raw_subcommand == "cadastrar_influencer"):
+                self.log.warning(
+                    "Signature mismatch do comando antigo cadastrar_influencer ignorado no handler global: interaction=%s data=%s",
+                    interaction.id,
+                    interaction.data,
+                )
+                return
         if isinstance(root_error, discord.HTTPException) and getattr(root_error, "code", None) in {40060, 10062}:
             self.log.warning(
                 "Interacao %s indisponivel no handler global (code=%s); erro ignorado.",
@@ -179,12 +195,23 @@ class DrakoriaBot(commands.Bot):
             return
         if isinstance(root_error, discord.app_commands.CommandNotFound):
             command_name = str(getattr(root_error, "name", "") or "")
+            if command_name == "gerar_codigo" or raw_name == "gerar_codigo":
+                try:
+                    await self._handle_raw_generate_beta_code(interaction)
+                    self.log.warning(
+                        "gerar_codigo processado pelo fallback raw apos CommandNotFound: interaction=%s data=%s",
+                        interaction.id,
+                        interaction.data,
+                    )
+                    return
+                except Exception as exc:
+                    root_error = exc
             if command_name in {"cadastrar_influencer", "listar_influencers"}:
                 embed = self.embeds.warning(
                     "Comando antigo removido",
                     (
                         "Esse atalho foi removido para evitar duplicidade.\n\n"
-                        "Use o comando oficial: `/beta_program cadastrar_influencer`.\n"
+                        "Use o comando oficial: `/beta_program gerar_codigo`.\n"
                         "Se o Discord ainda sugerir `/cadastrar_influencer`, feche e abra o Discord ou use `Ctrl+R` para recarregar."
                     ),
                 )
@@ -207,6 +234,89 @@ class DrakoriaBot(commands.Bot):
         except Exception:
             self.log.exception("Falha ao responder erro de slash command para interaction %s", interaction.id)
 
+    async def user_has_permission_role(self, interaction: discord.Interaction, permission_key: str) -> bool:
+        if not interaction.guild:
+            return False
+        allowed_roles = set(self.server_map.permission_roles(permission_key))
+        if not allowed_roles:
+            return False
+        member = interaction.user if isinstance(interaction.user, discord.Member) else None
+        if member is not None and allowed_roles.intersection(role.id for role in member.roles):
+            return True
+        cached_member = interaction.guild.get_member(interaction.user.id)
+        if cached_member is not None and allowed_roles.intersection(role.id for role in cached_member.roles):
+            return True
+        try:
+            fetched_member = await interaction.guild.fetch_member(interaction.user.id)
+        except discord.HTTPException:
+            self.log.warning(
+                "Nao foi possivel buscar membro %s para permissao %s.",
+                interaction.user.id,
+                permission_key,
+            )
+            return False
+        has_role = bool(allowed_roles.intersection(role.id for role in fetched_member.roles))
+        if not has_role:
+            self.log.warning(
+                "Permissao %s negada para %s. Esperado=%s | cargos=%s",
+                permission_key,
+                interaction.user.id,
+                sorted(allowed_roles),
+                [role.id for role in fetched_member.roles],
+            )
+        return has_role
+
+    async def _handle_raw_generate_beta_code(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            raise discord.app_commands.CheckFailure("Este comando deve ser usado no servidor.")
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
+        if not await self.user_has_permission_role(interaction, "generate_beta_code"):
+            raise discord.app_commands.CheckFailure("Apenas Criadores de Conteúdo podem gerar códigos beta.")
+
+        data = interaction.data if isinstance(interaction.data, dict) else {}
+        options = {
+            str(option.get("name")): option.get("value")
+            for option in data.get("options") or []
+            if isinstance(option, dict) and option.get("name")
+        }
+        nome = str(options.get("nome") or "").strip()
+        if not nome:
+            raise RuntimeError("Informe o nome público do influencer ou campanha.")
+        usuario = None
+        if options.get("usuario") is not None:
+            try:
+                usuario = await interaction.guild.fetch_member(int(options["usuario"]))
+            except (TypeError, ValueError, discord.HTTPException):
+                usuario = None
+        vagas = None
+        if options.get("vagas") is not None:
+            try:
+                vagas = int(options["vagas"])
+            except (TypeError, ValueError):
+                raise RuntimeError("A quantidade de vagas precisa ser um número válido.")
+
+        normalized = await self.beta_program_service.register_influencer_code(
+            interaction.guild.id,
+            code=None,
+            influencer_name=nome,
+            owner_user_id=usuario.id if usuario else None,
+            created_by_id=interaction.user.id,
+            slot_limit=vagas,
+        )
+        owner = usuario.mention if usuario else "sem usuário vinculado"
+        slot_label = vagas if vagas is not None else 5
+        await interaction.followup.send(
+            embed=self.embeds.success(
+                "✅ Código de Influencer Salvo",
+                (
+                    f"🎟️ Código aleatório `{normalized}` vinculado a **{nome}** ({owner}).\n"
+                    f"📊 Vagas disponíveis: **{slot_label}**.\n"
+                    "🧪 Entregue esse código só para quem ganhou a vaga. Para convite individual, use 1 vaga."
+                ),
+            ),
+            ephemeral=True,
+        )
 
     def _get_local_logo_path(self) -> str | None:
         """Returns absolute path if style.logo_url points to a local file."""

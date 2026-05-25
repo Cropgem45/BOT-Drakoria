@@ -1802,6 +1802,32 @@ class Database:
             await conn.close()
         return dict(row) if row else None
 
+    async def has_user_used_beta_influencer_code(
+        self,
+        guild_id: int,
+        user_id: int,
+        code: str,
+        *,
+        ignored_statuses: tuple[str, ...] = (),
+    ) -> bool:
+        clauses = ["guild_id = ?", "user_id = ?", "influencer_code = ?"]
+        params: list[Any] = [guild_id, user_id, code]
+        if ignored_statuses:
+            placeholders = ", ".join("?" for _ in ignored_statuses)
+            clauses.append(f"status NOT IN ({placeholders})")
+            params.extend(ignored_statuses)
+        query = (
+            "SELECT 1 FROM beta_tester_applications WHERE "
+            + " AND ".join(clauses)
+            + " LIMIT 1"
+        )
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(conn, query, tuple(params))
+        finally:
+            await conn.close()
+        return row is not None
+
     async def set_beta_influencer_code_active(self, guild_id: int, code: str, active: bool) -> bool:
         conn = await self.connect()
         try:

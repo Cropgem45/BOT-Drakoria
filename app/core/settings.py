@@ -30,6 +30,7 @@ REQUIRED_PERMISSION_KEYS = (
     "manage_tickets",
     "manage_points",
     "manage_beta_program",
+    "generate_beta_code",
     "publish_announcements",
     "view_server_map",
 )

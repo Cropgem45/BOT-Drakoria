@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import io
 import json
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -176,6 +177,16 @@ class BetaProgramService:
                         detail="No momento, não está habilitado novo envio após reprovação.",
                     )
 
+            if normalized_code and await self.bot.db.has_user_used_beta_influencer_code(
+                interaction.guild.id,
+                member.id,
+                normalized_code,
+                ignored_statuses=("in_progress", "pending"),
+            ):
+                raise RuntimeError(
+                    "🚫 Você já usou este código de influencer. Cada código só pode ser usado 1 vez por pessoa."
+                )
+
             if not influencer:
                 raise RuntimeError(
                     "🎟️ O Programa Beta está fechado para entrada direta. Use um código válido de influencer para iniciar."
@@ -215,13 +226,13 @@ class BetaProgramService:
         self,
         guild_id: int,
         *,
-        code: str,
+        code: str | None = None,
         influencer_name: str,
         owner_user_id: int | None,
         created_by_id: int | None,
         slot_limit: int | None = None,
     ) -> str:
-        normalized = self.normalize_influencer_code(code)
+        normalized = self.normalize_influencer_code(code) or await self.generate_unique_influencer_code(guild_id)
         if not normalized:
             raise RuntimeError("❌ Informe um código de influencer válido.")
         if len(normalized) < 3:
@@ -242,6 +253,16 @@ class BetaProgramService:
             active=True,
         )
         return normalized
+
+    async def generate_unique_influencer_code(self, guild_id: int) -> str:
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        for _ in range(20):
+            left = "".join(secrets.choice(alphabet) for _ in range(4))
+            right = "".join(secrets.choice(alphabet) for _ in range(4))
+            candidate = f"DRK-{left}-{right}"
+            if not await self.bot.db.get_beta_influencer_code(guild_id, candidate):
+                return candidate
+        raise RuntimeError("❌ Não foi possível gerar um código único agora. Tente novamente.")
 
     async def set_influencer_code_active(self, guild_id: int, code: str, active: bool) -> str:
         normalized = self.normalize_influencer_code(code)
