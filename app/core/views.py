@@ -21,6 +21,8 @@ class ViewFactory:
         self.bot.registered_persistent_views["beta_program_panel"] = 1
         self.bot.add_view(BetaProgramContinueView(self.bot))
         self.bot.registered_persistent_views["beta_program_continue"] = 1
+        self.bot.add_view(BetaQuotaPanelView(self.bot))
+        self.bot.registered_persistent_views["beta_quota_panel"] = 1
         self.bot.add_view(TicketPanelView(self.bot))
         self.bot.registered_persistent_views["ticket_panel"] = 1
         self.bot.add_view(TicketControlView(self.bot))
@@ -42,6 +44,9 @@ class ViewFactory:
 
     def build_beta_program_panel_view(self) -> discord.ui.View:
         return BetaProgramPanelView(self.bot)
+
+    def build_beta_quota_panel_view(self) -> discord.ui.View:
+        return BetaQuotaPanelView(self.bot)
 
     def build_beta_application_review_view(self, application_id: int) -> discord.ui.View:
         return BetaApplicationReviewView(self.bot, application_id)
@@ -589,7 +594,7 @@ class BetaProgramPanelView(discord.ui.View):
     @discord.ui.button(
         label="🎟️ Usar Código de Influencer",
         style=discord.ButtonStyle.primary,
-        custom_id="drakoria:beta:panel:start",
+        custom_id="drakoria:beta:v2:panel:start",
     )
     async def start_button(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
@@ -666,7 +671,7 @@ class BetaProgramContinueView(discord.ui.View):
     @discord.ui.button(
         label="📝 Continuar Candidatura Beta",
         style=discord.ButtonStyle.primary,
-        custom_id="drakoria:beta:continue",
+        custom_id="drakoria:beta:v2:continue",
     )
     async def continue_button(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         try:
@@ -705,6 +710,112 @@ class BetaProgramContinueView(discord.ui.View):
             else:
                 await interaction.response.send_message(
                     embed=self.bot.embeds.error("Falha no Programa Beta", "Erro interno ao continuar candidatura."),
+                    ephemeral=True,
+                )
+
+
+class BetaQuotaPanelView(discord.ui.View):
+    def __init__(self, bot: Any) -> None:
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    @discord.ui.button(
+        label="Gerar Código",
+        emoji="\N{ADMISSION TICKETS}",
+        style=discord.ButtonStyle.success,
+        custom_id="drakoria:beta:v2:quota:generate",
+    )
+    async def generate_button(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                embed=self.bot.embeds.error("Contexto Inválido", "Use esta ação dentro do servidor oficial."),
+                ephemeral=True,
+            )
+            return
+        if not self.bot.permission_service.has(interaction.user, "generate_beta_code"):
+            await interaction.response.send_message(
+                embed=self.bot.embeds.error(
+                    "Acesso Negado",
+                    "Apenas Criadores de Conteúdo podem gerar códigos beta.",
+                ),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_modal(BetaInfluencerGenerateCodeModal(self.bot))
+
+
+class BetaInfluencerGenerateCodeModal(discord.ui.Modal, title="Gerar Código Beta"):
+    influencer_name = discord.ui.TextInput(
+        label="Nome público ou campanha",
+        placeholder="Ex: Nexar, live de sábado, sorteio do canal...",
+        max_length=80,
+        required=True,
+    )
+
+    def __init__(self, bot: Any) -> None:
+        super().__init__()
+        self.bot = bot
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            if not interaction.guild or not isinstance(interaction.user, discord.Member):
+                await interaction.response.send_message(
+                    embed=self.bot.embeds.error("Contexto Inválido", "Use esta ação dentro do servidor oficial."),
+                    ephemeral=True,
+                )
+                return
+            if not self.bot.permission_service.has(interaction.user, "generate_beta_code"):
+                await interaction.response.send_message(
+                    embed=self.bot.embeds.error(
+                        "Acesso Negado",
+                        "Apenas Criadores de Conteúdo podem gerar códigos beta.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            name = str(self.influencer_name.value).strip()
+            result = await self.bot.beta_program_service.generate_single_use_influencer_code(
+                interaction.guild.id,
+                influencer_name=name,
+                owner_user_id=interaction.user.id,
+                created_by_id=interaction.user.id,
+            )
+            await self.bot.beta_program_service.publish_quota_panel(interaction.guild)
+            embed = discord.Embed(
+                title="Código Individual Gerado",
+                description=(
+                    f"Código: `{result['code']}`\n"
+                    f"Influencer: **{name}** ({interaction.user.mention})\n"
+                    "Uso: **1 pessoa, 1 única vez**\n"
+                    f"Convites restantes para gerar: **{int(result['remaining'])}/5**"
+                ),
+                color=self.bot.embeds.success_color,
+            )
+            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+            embed.set_footer(text="Drakoria | Convite beta individual")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        except RuntimeError as exc:
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    embed=self.bot.embeds.error("Falha ao Gerar Código", str(exc)),
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    embed=self.bot.embeds.error("Falha ao Gerar Código", str(exc)),
+                    ephemeral=True,
+                )
+        except Exception as exc:
+            self.bot.log.exception("Falha ao gerar codigo beta pelo painel", exc_info=exc)
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    embed=self.bot.embeds.error("Falha ao Gerar Código", "Erro interno inesperado."),
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    embed=self.bot.embeds.error("Falha ao Gerar Código", "Erro interno inesperado."),
                     ephemeral=True,
                 )
 

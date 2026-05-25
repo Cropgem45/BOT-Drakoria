@@ -95,20 +95,6 @@ class BetaProgramCog(
             ephemeral=True,
         )
 
-    @app_commands.command(name="gerar_codigo", description="Gera um código individual de ingresso beta")
-    @app_commands.guild_only()
-    @app_commands.describe(
-        nome="Nome público do influencer ou campanha",
-        usuario="Marque o influencer; se vazio, usa você como dono das 5 vagas",
-    )
-    async def gerar_codigo(
-        self,
-        interaction: discord.Interaction,
-        nome: str,
-        usuario: discord.Member | None = None,
-    ) -> None:
-        await self._send_generated_influencer_code(interaction, nome=nome, usuario=usuario)
-
     async def _handle_cadastrar_influencer_raw(self, interaction: discord.Interaction) -> bool:
         if not interaction.guild:
             raise app_commands.CheckFailure("Este comando deve ser usado no servidor.")
@@ -431,15 +417,10 @@ class BetaCreatorCodeCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="gerar_codigo", description="Gera um código individual de ingresso beta")
-    @app_commands.guild_only()
-    @app_commands.describe(
-        nome="Nome público do influencer ou campanha",
-        usuario="Marque o influencer; se vazio, usa você como dono das 5 vagas",
-    )
-    async def gerar_codigo(
+    async def _send_generated_influencer_code(
         self,
         interaction: discord.Interaction,
+        *,
         nome: str,
         usuario: discord.Member | None = None,
     ) -> None:
@@ -467,6 +448,20 @@ class BetaCreatorCodeCog(commands.Cog):
             ),
             ephemeral=True,
         )
+
+    @app_commands.command(name="codigo_beta", description="Gera um convite beta individual atualizado")
+    @app_commands.guild_only()
+    @app_commands.describe(
+        nome="Nome público do influencer ou campanha",
+        usuario="Marque o influencer; se vazio, usa você como dono das 5 vagas",
+    )
+    async def codigo_beta(
+        self,
+        interaction: discord.Interaction,
+        nome: str,
+        usuario: discord.Member | None = None,
+    ) -> None:
+        await self._send_generated_influencer_code(interaction, nome=nome, usuario=usuario)
 
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         root_error = getattr(error, "original", error)

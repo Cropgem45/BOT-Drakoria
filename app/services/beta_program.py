@@ -134,12 +134,12 @@ class BetaProgramService:
             if isinstance(saved_channel, discord.TextChannel):
                 try:
                     message = await saved_channel.fetch_message(int(state["message_id"]))
-                    await message.edit(embed=embed)
+                    await message.edit(embed=embed, view=self.bot.view_factory.build_beta_quota_panel_view())
                 except discord.NotFound:
                     message = None
 
         if message is None:
-            message = await channel.send(embed=embed)
+            message = await channel.send(embed=embed, view=self.bot.view_factory.build_beta_quota_panel_view())
         await self.bot.db.save_beta_quota_panel_message(guild.id, channel.id, message.id)
         return message
 
