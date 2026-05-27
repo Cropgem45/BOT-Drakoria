@@ -29,12 +29,14 @@ const { listingButtons, myListingCloseButtons } = require('../components/buttons
 const { negotiationButtons } = require('../components/buttons/negotiationButtons');
 const { createdListingButtons } = require('../components/buttons/createdListingButtons');
 const { startImageUpload } = require('./imageUploadService');
+const { deferEphemeral, sendEphemeral } = require('../utils/respond');
 
 async function createListing(interaction, category, type = 'sell') {
+  await deferEphemeral(interaction);
+
   if (!env.MARKET_CHANNEL_ID) {
-    await interaction.reply({
+    await sendEphemeral(interaction, {
       content: 'O canal do mercado ainda nao foi configurado em MARKET_CHANNEL_ID.',
-      ephemeral: true,
     });
     return;
   }
@@ -74,22 +76,23 @@ async function createListing(interaction, category, type = 'sell') {
     messageId: message.id,
   }));
 
-  await interaction.reply({
+  await sendEphemeral(interaction, {
     embeds: [createdEmbed(listing)],
     components: [createdListingButtons(listing.id)],
-    ephemeral: true,
   });
 }
 
 async function requestListingImage(interaction, listingId) {
+  await deferEphemeral(interaction);
+
   const listing = findListingById(listingId);
   if (!listing || listing.status !== 'active') {
-    await interaction.reply({ content: 'Este anuncio nao esta mais ativo.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Este anuncio nao esta mais ativo.' });
     return;
   }
 
   if (listing.sellerId !== interaction.user.id) {
-    await interaction.reply({ content: 'Apenas o dono do anuncio pode adicionar imagem.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Apenas o dono do anuncio pode adicionar imagem.' });
     return;
   }
 
@@ -100,21 +103,22 @@ async function requestListingImage(interaction, listingId) {
     listingId: listing.id,
   });
 
-  await interaction.reply({
+  await sendEphemeral(interaction, {
     content: 'Cole o print do item neste canal com Ctrl+V em ate 2 minutos.',
-    ephemeral: true,
   });
 }
 
 async function sendInterest(interaction, listingId) {
+  await deferEphemeral(interaction);
+
   const listing = findListingById(listingId);
   if (!listing || listing.status !== 'active') {
-    await interaction.reply({ content: 'Este anuncio nao esta mais ativo.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Este anuncio nao esta mais ativo.' });
     return;
   }
 
   if (listing.sellerId === interaction.user.id) {
-    await interaction.reply({ content: 'Voce nao pode demonstrar interesse no proprio anuncio.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Voce nao pode demonstrar interesse no proprio anuncio.' });
     return;
   }
 
@@ -122,9 +126,8 @@ async function sendInterest(interaction, listingId) {
   if (existing) {
     const channel = await interaction.client.channels.fetch(existing.channelId).catch(() => null);
     if (channel) {
-      await interaction.reply({
+      await sendEphemeral(interaction, {
         content: `Voce ja tem uma conversa aberta para este anuncio: ${channel}`,
-        ephemeral: true,
       });
       return;
     }
@@ -141,9 +144,8 @@ async function sendInterest(interaction, listingId) {
     });
   } catch {}
 
-  await interaction.reply({
+  await sendEphemeral(interaction, {
     content: `Conversa criada com o vendedor: ${conversationChannel}`,
-    ephemeral: true,
   });
 }
 
@@ -158,9 +160,8 @@ async function createNegotiationChannel(interaction, listing) {
     if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels)) missingGuildPerms.push('Gerenciar Canais');
     if (!botMember.permissions.has(PermissionFlagsBits.ViewChannel)) missingGuildPerms.push('Ver Canais');
     if (missingGuildPerms.length) {
-      await interaction.reply({
+      await sendEphemeral(interaction, {
         content: `Nao consegui criar a conversa privada. Permissoes faltando no bot: ${missingGuildPerms.join(', ')}.`,
-        ephemeral: true,
       });
       return null;
     }
@@ -173,9 +174,8 @@ async function createNegotiationChannel(interaction, listing) {
         if (!parentPerms?.has(PermissionFlagsBits.ViewChannel)) missingParentPerms.push('Ver Canal (na categoria)');
         if (!parentPerms?.has(PermissionFlagsBits.ManageChannels)) missingParentPerms.push('Gerenciar Canais (na categoria)');
         if (missingParentPerms.length) {
-          await interaction.reply({
+          await sendEphemeral(interaction, {
             content: `Nao consegui criar a conversa privada na categoria atual. Permissoes faltando: ${missingParentPerms.join(', ')}.`,
-            ephemeral: true,
           });
           return null;
         }
@@ -251,29 +251,30 @@ async function createNegotiationChannel(interaction, listing) {
       status: error?.status,
       rawError: error?.rawError,
     });
-    await interaction.reply({
+    await sendEphemeral(interaction, {
       content: 'Nao consegui criar a conversa privada. Verifique se o bot tem permissao de Gerenciar Canais e acesso a categoria.',
-      ephemeral: true,
     });
     return null;
   }
 }
 
 async function closeConversation(interaction, conversationId) {
+  await deferEphemeral(interaction);
+
   const conversation = findConversationById(conversationId);
   if (!conversation || conversation.status !== 'open') {
-    await interaction.reply({ content: 'Esta conversa ja foi encerrada.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Esta conversa ja foi encerrada.' });
     return;
   }
 
   const allowed = [conversation.sellerId, conversation.buyerId].includes(interaction.user.id);
   if (!allowed) {
-    await interaction.reply({ content: 'Apenas vendedor ou cliente podem encerrar esta conversa.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Apenas vendedor ou cliente podem encerrar esta conversa.' });
     return;
   }
 
   closeConversationRecord(conversation.id);
-  await interaction.reply({ content: 'Conversa encerrada. Este canal sera removido em alguns segundos.', ephemeral: true });
+  await sendEphemeral(interaction, { content: 'Conversa encerrada. Este canal sera removido em alguns segundos.' });
 
   setTimeout(async () => {
     const channel = await interaction.client.channels.fetch(conversation.channelId).catch(() => null);
@@ -310,14 +311,16 @@ function normalizeImageUrl(value) {
 }
 
 async function closeListing(interaction, listingId) {
+  await deferEphemeral(interaction);
+
   const listing = findListingById(listingId);
   if (!listing || listing.status !== 'active') {
-    await interaction.reply({ content: 'Este anuncio ja foi encerrado.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Este anuncio ja foi encerrado.' });
     return;
   }
 
   if (listing.sellerId !== interaction.user.id) {
-    await interaction.reply({ content: 'Apenas o dono pode encerrar este anuncio.', ephemeral: true });
+    await sendEphemeral(interaction, { content: 'Apenas o dono pode encerrar este anuncio.' });
     return;
   }
 
@@ -328,16 +331,17 @@ async function closeListing(interaction, listingId) {
   }));
 
   await editListingAsClosed(interaction.client, closedListing);
-  await interaction.reply({ content: 'Anuncio encerrado.', ephemeral: true });
+  await sendEphemeral(interaction, { content: 'Anuncio encerrado.' });
 }
 
 async function showMyListings(interaction) {
+  await deferEphemeral(interaction);
+
   const listings = findActiveListingsBySeller(interaction.guildId, interaction.user.id, 5);
 
-  await interaction.reply({
+  await sendEphemeral(interaction, {
     embeds: [myListingsEmbed(listings)],
     components: myListingCloseButtons(listings),
-    ephemeral: true,
   });
 }
 

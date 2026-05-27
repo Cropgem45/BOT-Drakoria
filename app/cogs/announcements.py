@@ -16,11 +16,20 @@ class AnnouncementModal(discord.ui.Modal, title="Publicar Anúncio"):
         max_length=3800,
     )
 
-    def __init__(self, cog: "AnnouncementCog", titulo: str, marcacao: discord.Role | None) -> None:
+    def __init__(
+        self,
+        cog: "AnnouncementCog",
+        titulo: str,
+        marcacao: discord.Role | None,
+        pessoa: discord.Member | None,
+        imagem: discord.Attachment | None,
+    ) -> None:
         super().__init__(timeout=300)
         self.cog = cog
         self.titulo = titulo
         self.marcacao = marcacao
+        self.pessoa = pessoa
+        self.imagem = imagem
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await self.cog._publish_announcement(
@@ -28,6 +37,8 @@ class AnnouncementModal(discord.ui.Modal, title="Publicar Anúncio"):
             titulo=self.titulo,
             mensagem=str(self.mensagem.value),
             marcacao=self.marcacao,
+            pessoa=self.pessoa,
+            imagem=self.imagem,
         )
 
 
@@ -36,14 +47,30 @@ class AnnouncementCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="anuncio", description="Abre o editor de anuncio oficial")
+    @app_commands.describe(
+        titulo="Titulo principal do anuncio.",
+        marcacao="Cargo que sera marcado acima do anuncio.",
+        pessoa="Pessoa que sera marcada acima do anuncio.",
+        imagem="Imagem que aparecera em destaque no anuncio.",
+    )
     @app_commands.guild_only()
     async def anuncio(
         self,
         interaction: discord.Interaction,
         titulo: str,
         marcacao: discord.Role | None = None,
+        pessoa: discord.Member | None = None,
+        imagem: discord.Attachment | None = None,
     ) -> None:
-        await interaction.response.send_modal(AnnouncementModal(self, titulo=titulo, marcacao=marcacao))
+        await interaction.response.send_modal(
+            AnnouncementModal(
+                self,
+                titulo=titulo,
+                marcacao=marcacao,
+                pessoa=pessoa,
+                imagem=imagem,
+            )
+        )
 
     async def _publish_announcement(
         self,
@@ -52,6 +79,8 @@ class AnnouncementCog(commands.Cog):
         titulo: str,
         mensagem: str,
         marcacao: discord.Role | None = None,
+        pessoa: discord.Member | None = None,
+        imagem: discord.Attachment | None = None,
     ) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             raise app_commands.CheckFailure("Este comando só pode ser usado dentro do servidor oficial.")
@@ -90,15 +119,24 @@ class AnnouncementCog(commands.Cog):
                 f"Permissões ausentes: {', '.join(missing_permissions)}"
             )
 
-        mention_content: str | None = None
+        mention_parts: list[str] = []
         allowed_mentions = discord.AllowedMentions.none()
         if marcacao is not None:
             if not interaction.user.guild_permissions.mention_everyone:
                 raise app_commands.CheckFailure("Teu usuário não possui permissão para marcar cargos.")
             if not target_channel.permissions_for(me).mention_everyone:
                 raise app_commands.CheckFailure("O bot não possui permissão `Mention Everyone` neste canal.")
-            mention_content = marcacao.mention
-            allowed_mentions = discord.AllowedMentions(everyone=False, roles=[marcacao], users=False)
+            mention_parts.append(marcacao.mention)
+
+        if pessoa is not None:
+            mention_parts.append(pessoa.mention)
+
+        if marcacao is not None or pessoa is not None:
+            allowed_mentions = discord.AllowedMentions(
+                everyone=False,
+                roles=[marcacao] if marcacao is not None else False,
+                users=[pessoa] if pessoa is not None else False,
+            )
 
         title_text = titulo.strip()
         body_text = mensagem.replace("\r\n", "\n").strip()
@@ -106,6 +144,9 @@ class AnnouncementCog(commands.Cog):
             raise app_commands.CheckFailure("O título não pode ser vazio.")
         if not body_text:
             raise app_commands.CheckFailure("A mensagem não pode ser vazia.")
+        image_url = self._resolve_attachment_image_url(imagem)
+        if imagem is not None and image_url is None:
+            raise app_commands.CheckFailure("O arquivo enviado em `imagem` precisa ser uma imagem válida.")
 
         logo_icon_url, large_logo_url = self._resolve_logo_urls(interaction.guild)
         if not logo_icon_url:
@@ -117,14 +158,22 @@ class AnnouncementCog(commands.Cog):
             description=body_text,
             color=self.bot.server_map.announcements_embed_color() or self.bot.embeds.default_color,
             thumbnail_url=large_logo_url,
+            image_url=image_url,
+            author_name=f"Comunicado Oficial | {interaction.guild.name}",
+            author_icon_url=logo_icon_url,
             footer_text=self.bot.server_map.announcements_default_footer(),
             footer_icon_url=logo_icon_url,
             timestamp=True,
         )
+        embed.add_field(name="Publicado por", value=interaction.user.mention, inline=True)
+        if pessoa is not None:
+            embed.add_field(name="Destinatário", value=pessoa.mention, inline=True)
+
+        mention_content = " ".join(mention_parts) if mention_parts else None
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            sent_message = await target_channel.send(
+            await target_channel.send(
                 content=mention_content,
                 embed=embed,
                 allowed_mentions=allowed_mentions,
@@ -142,6 +191,7 @@ class AnnouncementCog(commands.Cog):
                 target_channel=target_channel,
                 title=title_text,
                 mention_text=mention_content,
+                image_url=image_url,
                 status="failed",
                 failure_reason=f"Discord HTTPException: {exc}",
             )
@@ -159,13 +209,14 @@ class AnnouncementCog(commands.Cog):
             target_channel=target_channel,
             title=title_text,
             mention_text=mention_content,
+            image_url=image_url,
             status="success",
             failure_reason=None,
         )
         await interaction.followup.send(
             embed=self.bot.embeds.success(
                 "Anúncio Publicado",
-                f"O anúncio foi publicado em {target_channel.mention}.\nMensagem: indisponível.",
+                f"O anúncio foi publicado em {target_channel.mention}.",
             ),
             ephemeral=True,
         )
@@ -177,6 +228,7 @@ class AnnouncementCog(commands.Cog):
         target_channel: discord.TextChannel,
         title: str,
         mention_text: str | None,
+        image_url: str | None,
         status: str,
         failure_reason: str | None,
     ) -> None:
@@ -190,6 +242,7 @@ class AnnouncementCog(commands.Cog):
                 ("Canal de destino", f"{target_channel.mention}", False),
                 ("Titulo", title[:200], False),
                 ("Marcação", mention_text or "nenhuma", True),
+                ("Imagem", "sim" if image_url else "nao", True),
                 ("Resultado", status, True),
             ]
             if failure_reason:
@@ -236,6 +289,15 @@ class AnnouncementCog(commands.Cog):
             return False
         return True
 
+    def _resolve_attachment_image_url(self, attachment: discord.Attachment | None) -> str | None:
+        if attachment is None:
+            return None
+        content_type = attachment.content_type or ""
+        filename = attachment.filename or ""
+        if content_type.startswith("image/") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+            return attachment.url
+        return None
+
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         try:
             if interaction.response.is_done():
@@ -254,6 +316,5 @@ class AnnouncementCog(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(AnnouncementCog(bot), guild=discord.Object(id=bot.server_map.guild_id()))
-
 
 
