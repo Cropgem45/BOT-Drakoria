@@ -159,13 +159,10 @@ class AnnouncementCog(commands.Cog):
             color=self.bot.server_map.announcements_embed_color() or self.bot.embeds.default_color,
             thumbnail_url=large_logo_url,
             image_url=image_url,
-            author_name=f"Comunicado Oficial | {interaction.guild.name}",
-            author_icon_url=logo_icon_url,
             footer_text=self.bot.server_map.announcements_default_footer(),
             footer_icon_url=logo_icon_url,
             timestamp=True,
         )
-        embed.add_field(name="Publicado por", value=interaction.user.mention, inline=True)
         if pessoa is not None:
             embed.add_field(name="Destinatário", value=pessoa.mention, inline=True)
 
@@ -316,5 +313,4 @@ class AnnouncementCog(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(AnnouncementCog(bot), guild=discord.Object(id=bot.server_map.guild_id()))
-
 

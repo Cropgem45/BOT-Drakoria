@@ -19,6 +19,7 @@ DONATIONS_CHANNEL_ID = 1487647476482838619
 THRONE_GAP_ALERT_REAIS = 100
 TOP_DONATERS_LIMIT = 10
 THRONE_NAME_FRAME_WIDTH = 22
+THRONE_REFRESH_INTERVAL_SECONDS = 30 * 60
 
 
 @dataclass(slots=True)
@@ -40,6 +41,7 @@ class DonaterService:
         self._lock = asyncio.Lock()
         self._cache: dict[str, Any] | None = None
         self._bootstrapped = False
+        self._refresh_task: asyncio.Task[None] | None = None
 
     async def bootstrap(self, guild: discord.Guild) -> None:
         if self._bootstrapped:
@@ -47,6 +49,7 @@ class DonaterService:
         self._bootstrapped = True
         await self.load()
         await self.refresh(guild, announce=False, create_if_missing=False)
+        self._start_refresh_loop(guild.id)
 
     async def load(self) -> dict[str, Any]:
         async with self._lock:
@@ -152,6 +155,12 @@ class DonaterService:
             top_name = top_member.display_name if top_member else str(top_data.get("username") or f"Patrono {top_user_id}")
             top_since = self._parse_iso(data["meta"].get("topSince")) or self._parse_iso(top_data.get("dateJoined"))
             throne_days = max((datetime.now(UTC) - top_since).days, 0) if top_since else 0
+            throne_since_line = (
+                f"Desde {self._discord_timestamp(top_since, 'F')}\n"
+                f"({self._discord_timestamp(top_since, 'R')})"
+                if top_since
+                else "Desde uma era não registrada"
+            )
             embed.add_field(
                 name="👑 SOBERANO DO REINO",
                 value=(
@@ -162,7 +171,8 @@ class DonaterService:
                     "💎 **TOTAL APOIADO**\n"
                     f"**{self._format_money(self._total_cents(top_data))}**\n\n"
                     "🏆 **NO TRONO HÁ**\n"
-                    f"**{throne_days} DIAS**\n\n"
+                    f"**{throne_days} DIAS**\n"
+                    f"{throne_since_line}\n\n"
                     "████████████████████"
                 ),
                 inline=False,
@@ -309,6 +319,24 @@ class DonaterService:
                 data["meta"]["rankingMessageId"] = message.id
                 await self._save_locked()
         return message
+
+    def _start_refresh_loop(self, guild_id: int) -> None:
+        if self._refresh_task and not self._refresh_task.done():
+            return
+        self._refresh_task = asyncio.create_task(self._refresh_loop(guild_id), name="donater-throne-refresh")
+
+    async def _refresh_loop(self, guild_id: int) -> None:
+        while not self.bot.is_closed():
+            await asyncio.sleep(THRONE_REFRESH_INTERVAL_SECONDS)
+            guild = self.bot.get_guild(guild_id)
+            if guild is None:
+                continue
+            try:
+                await self.refresh(guild, announce=False, create_if_missing=False)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.bot.log.exception("Falha ao atualizar timer do Trono dos Patronos.")
 
     async def _sync_top_role(self, guild: discord.Guild, old_top_id: str | None, new_top_id: str | None) -> None:
         role = guild.get_role(TOP_DONATER_ROLE_ID)
@@ -534,6 +562,10 @@ class DonaterService:
         except ValueError:
             return None
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _discord_timestamp(value: datetime, style: str) -> str:
+        return f"<t:{int(value.timestamp())}:{style}>"
 
     @staticmethod
     def _amount_to_cents(value: float) -> int:

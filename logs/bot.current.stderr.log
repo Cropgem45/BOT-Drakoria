@@ -1,0 +1,56 @@
+2026-05-27 12:33:57,865 | INFO | discord.client | logging in using static token
+2026-05-27 12:33:58,835 | INFO | drakoria.bot | Slash commands sincronizados na guild 1486185045374013571: adddonate, admin, anuncio, beta_program, cadastro, codigo_beta, registro, removedonate, setdonate, ticket, top
+2026-05-27 12:33:59,486 | INFO | discord.gateway | Shard ID None has connected to Gateway (Session ID: 0ac2fca475917bb65dcaa045a0235231).
+2026-05-27 12:34:01,510 | INFO | drakoria.bot | Bot pronto como Drakoria#3549 (1489798397413036202)
+2026-05-27 12:34:02,921 | INFO | drakoria.bot | Logo local enviada para Discord CDN.
+2026-05-27 14:07:01,729 | INFO | discord.gateway | Shard ID None has successfully RESUMED session 0ac2fca475917bb65dcaa045a0235231.
+2026-05-27 14:31:11,965 | INFO | discord.gateway | Shard ID None has successfully RESUMED session 0ac2fca475917bb65dcaa045a0235231.
+2026-05-27 15:12:40,811 | ERROR | discord.ui.view | Ignoring exception in view <RegistrationConfirmationView timeout=180 children=2> for item <Button style=<ButtonStyle.success: 3> url=None disabled=False label='Confirmo leitura e concordância' emoji=None row=None sku_id=None id=None>
+Traceback (most recent call last):
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\ui\view.py", line 598, in _scheduled_task
+    await item.callback(interaction)
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\app\core\views.py", line 150, in confirm_button
+    await interaction.response.send_message(
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\interactions.py", line 1085, in send_message
+    data = await adapter.create_interaction_response(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\webhook\async_.py", line 224, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10062): Unknown interaction
+2026-05-27 16:15:57,226 | ERROR | drakoria.bot | Falha em interação de ticket (item=drakoria:ticket:claim)
+Traceback (most recent call last):
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\ui\view.py", line 598, in _scheduled_task
+    await item.callback(interaction)
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\app\core\views.py", line 1601, in claim_button
+    await self._safe_reply(
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\app\core\views.py", line 1526, in _safe_reply
+    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\webhook\async_.py", line 1871, in send
+    raise TypeError(f'expected view parameter to be of type View or LayoutView, not {view.__class__.__name__}')
+TypeError: expected view parameter to be of type View or LayoutView, not NoneType
+2026-05-27 16:15:57,230 | ERROR | asyncio | Task exception was never retrieved
+future: <Task finished name='discord-ui-view-dispatch-d51f378e6c590e4ece32736ba9d1597b' coro=<BaseView._scheduled_task() done, defined at C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\ui\view.py:587> exception=TypeError('expected view parameter to be of type View or LayoutView, not NoneType')>
+Traceback (most recent call last):
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\ui\view.py", line 598, in _scheduled_task
+    await item.callback(interaction)
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\app\core\views.py", line 1601, in claim_button
+    await self._safe_reply(
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\app\core\views.py", line 1526, in _safe_reply
+    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\webhook\async_.py", line 1871, in send
+    raise TypeError(f'expected view parameter to be of type View or LayoutView, not {view.__class__.__name__}')
+TypeError: expected view parameter to be of type View or LayoutView, not NoneType
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\ui\view.py", line 600, in _scheduled_task
+    return await self.on_error(interaction, e, item)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\app\core\views.py", line 1532, in on_error
+    await self._safe_reply(
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\app\core\views.py", line 1526, in _safe_reply
+    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+  File "C:\Users\Murillo\Desktop\BOT Drakoria\.venv\Lib\site-packages\discord\webhook\async_.py", line 1871, in send
+    raise TypeError(f'expected view parameter to be of type View or LayoutView, not {view.__class__.__name__}')
+TypeError: expected view parameter to be of type View or LayoutView, not NoneType

@@ -78,6 +78,14 @@ function findActiveListingsBySeller(guildId, sellerId, limit = 5) {
     .slice(0, limit);
 }
 
+function findActiveListings(limit = 100) {
+  const store = readStore();
+  return store.listings
+    .filter((listing) => listing.status === 'active')
+    .sort((a, b) => Date.parse(a.expiresAt) - Date.parse(b.expiresAt))
+    .slice(0, limit);
+}
+
 function findExpiredActiveListings(limit = 25) {
   const now = Date.now();
   const store = readStore();
@@ -115,6 +123,7 @@ module.exports = {
   updateListing,
   findListingById,
   findActiveListingsBySeller,
+  findActiveListings,
   findExpiredActiveListings,
   findClosableListings,
   deleteListing,

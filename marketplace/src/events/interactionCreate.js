@@ -2,7 +2,7 @@ const { ids, parts } = require('../utils/componentIds');
 const { categoryMenu } = require('../components/menus/categoryMenu');
 const { listingModal } = require('../components/modals/listingModal');
 const listingService = require('../services/listingService');
-const { sendEphemeral } = require('../utils/respond');
+const { deferEphemeral, sendEphemeral } = require('../utils/respond');
 
 module.exports = {
   name: 'interactionCreate',
@@ -17,6 +17,7 @@ module.exports = {
 
       if (interaction.isButton()) {
         if (interaction.customId === ids.createListing) {
+          await deferEphemeral(interaction);
           await sendEphemeral(interaction, {
             content: 'Escolha a categoria do item que voce quer vender.',
             components: [categoryMenu('sell')],
@@ -25,6 +26,7 @@ module.exports = {
         }
 
         if (interaction.customId === ids.createBuying) {
+          await deferEphemeral(interaction);
           await sendEphemeral(interaction, {
             content: 'Escolha a categoria do item que voce quer comprar.',
             components: [categoryMenu('buy')],
@@ -61,7 +63,9 @@ module.exports = {
 
         if (scope === 'market' && action === 'negotiation' && detail === 'close') {
           await listingService.closeConversation(interaction, listingId);
+          return;
         }
+        await sendUnhandledMarketInteraction(interaction);
         return;
       }
 
@@ -69,7 +73,9 @@ module.exports = {
         const [scope, action, type] = parts(interaction.customId);
         if (scope === 'market' && action === 'category') {
           await interaction.showModal(listingModal(type || 'sell', interaction.values[0]));
+          return;
         }
+        await sendUnhandledMarketInteraction(interaction);
         return;
       }
 
@@ -77,7 +83,9 @@ module.exports = {
         const [scope, action, type, category] = parts(interaction.customId);
         if (scope === 'market' && action === 'modal') {
           await listingService.createListing(interaction, category, type || 'sell');
+          return;
         }
+        await sendUnhandledMarketInteraction(interaction);
       }
     } catch (error) {
       if ([40060, 10062].includes(error.code)) {
@@ -92,3 +100,13 @@ module.exports = {
     }
   },
 };
+
+async function sendUnhandledMarketInteraction(interaction) {
+  const customId = interaction.customId || '';
+  if (!customId.startsWith('market:')) return;
+
+  console.warn(`[Mercado Drakoria] Componente sem handler: ${customId}`);
+  await sendEphemeral(interaction, {
+    content: 'Este botao do mercado esta desatualizado. Use o painel mais recente do Mercado Drakoria.',
+  });
+}

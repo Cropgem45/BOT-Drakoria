@@ -31,7 +31,7 @@
     "1099094580881797130": {
       "username": "Padre Santiago",
       "total": 3,
-      "lastDonation": -45,
+      "lastDonation": 0,
       "history": [
         {
           "type": "set",
@@ -62,6 +62,16 @@
           "actorId": "714572707576021072",
           "actorName": "Campos  • Nexar Studios",
           "at": "2026-05-19T17:10:02.195239+00:00"
+        },
+        {
+          "type": "set",
+          "amount": 3,
+          "delta": 0,
+          "previousTotal": 3,
+          "newTotal": 3,
+          "actorId": "1409302531313762435",
+          "actorName": "Murillo • Nexar Studios",
+          "at": "2026-05-19T18:05:29.312955+00:00"
         }
       ],
       "dateJoined": "2026-05-19T17:08:10.682019+00:00"
@@ -93,15 +103,33 @@
         }
       ],
       "dateJoined": "2026-05-19T17:10:24.266805+00:00"
+    },
+    "303650937816481795": {
+      "username": "TOP",
+      "total": 10,
+      "lastDonation": 10,
+      "history": [
+        {
+          "type": "set",
+          "amount": 10,
+          "delta": 10,
+          "previousTotal": 0,
+          "newTotal": 10,
+          "actorId": "1409302531313762435",
+          "actorName": "Murillo • Nexar Studios",
+          "at": "2026-05-19T18:10:22.553384+00:00"
+        }
+      ],
+      "dateJoined": "2026-05-19T18:10:22.553384+00:00"
     }
   },
   "meta": {
     "rankingChannelId": 1506326402763460708,
-    "rankingMessageId": 1506330537873379408,
-    "currentTopId": "467809063305084939",
-    "topSince": "2026-05-19T17:10:24.270841+00:00",
+    "rankingMessageId": 1506357097036517397,
+    "currentTopId": "303650937816481795",
+    "topSince": "2026-05-19T18:10:22.558117+00:00",
     "rotationIndex": 12,
-    "lastUpdated": "2026-05-19T18:05:20.244145+00:00",
+    "lastUpdated": "2026-05-25T18:57:19.147451+00:00",
     "resetHistory": [
       {
         "at": "2026-05-19T17:03:41.636336+00:00",

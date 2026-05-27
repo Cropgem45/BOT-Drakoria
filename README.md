@@ -6,7 +6,7 @@ Bot administrativo em `Python + discord.py 2.x`, com operacao orientada por ID, 
 
 - `Registrar-se` (registro inicial automatico por painel)
 - `Cadastro Oficial` (cadastro em etapas, validacao de idade, cargo de membro e nickname)
-- `Programa Beta Tester` (ingresso fechado por codigo de influencer, 5 vagas por codigo por padrao, candidatura, aprovacao/reprovacao, cargo e carteirinha)
+- `Programa Beta Tester` (ingresso fechado por codigo aleatorio de influencer, vagas limitadas por codigo, candidatura, aprovacao/reprovacao, cargo e carteirinha)
 - `Tickets` (painel, abertura, atribuicao, status, encerramento e transcricao)
 - `Anuncios` (editor via modal, permissao por cargos e auditoria)
 - `Bate-ponto por voz da staff` (sessao automatica, tolerancia, relatorios e dashboard de gestao)

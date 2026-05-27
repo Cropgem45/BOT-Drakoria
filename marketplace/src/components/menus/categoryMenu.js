@@ -11,7 +11,6 @@ function categoryMenu(type = 'sell') {
         Object.entries(categories).map(([value, category]) => ({
           label: category.label,
           value,
-          emoji: category.emoji,
         })),
       ),
   );

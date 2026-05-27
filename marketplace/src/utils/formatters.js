@@ -6,10 +6,17 @@ function categoryText(category) {
 }
 
 function compactTimeLeft(expiresAt) {
-  const ms = new Date(expiresAt).getTime() - Date.now();
+  const expiresMs = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expiresMs)) return 'tempo indisponivel';
+  const ms = expiresMs - Date.now();
   if (ms <= 0) return 'expirado';
+  const unix = Math.floor(expiresMs / 1000);
   const hours = Math.ceil(ms / 1000 / 60 / 60);
-  return `${hours}h restantes`;
+  return `${hours}h restantes (${discordRelativeTime(unix)})`;
+}
+
+function discordRelativeTime(unix) {
+  return `<t:${unix}:R>`;
 }
 
 function displayName(user) {
@@ -24,6 +31,7 @@ function cleanText(value, fallback = 'Nao informado') {
 module.exports = {
   categoryText,
   compactTimeLeft,
+  discordRelativeTime,
   displayName,
   cleanText,
 };

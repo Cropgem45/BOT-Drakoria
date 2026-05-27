@@ -1,6 +1,12 @@
 const { EXPIRATION_INTERVAL_MS, CLOSED_DELETE_HOURS } = require('../config/constants');
-const { editListingAsClosed } = require('../services/listingService');
-const { findExpiredActiveListings, updateListing, findClosableListings, deleteListing } = require('../services/listingStore');
+const { editListingAsActive, editListingAsClosed } = require('../services/listingService');
+const {
+  findActiveListings,
+  findExpiredActiveListings,
+  updateListing,
+  findClosableListings,
+  deleteListing,
+} = require('../services/listingStore');
 
 let started = false;
 
@@ -18,6 +24,11 @@ function startExpirationHandler(client) {
         closedAt: new Date().toISOString(),
       }));
       await editListingAsClosed(client, expiredListing);
+    }
+
+    const activeListings = findActiveListings(50);
+    for (const listing of activeListings) {
+      await editListingAsActive(client, listing);
     }
 
     const olderThanMs = CLOSED_DELETE_HOURS * 60 * 60 * 1000;

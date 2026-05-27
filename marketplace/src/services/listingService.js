@@ -362,12 +362,30 @@ async function editListingAsClosed(client, listing) {
   }
 }
 
+async function editListingAsActive(client, listing) {
+  if (!listing || !listing.channelId || !listing.messageId) return;
+
+  try {
+    const channel = await client.channels.fetch(listing.channelId);
+    if (!channel || !channel.isTextBased()) return;
+
+    const message = await channel.messages.fetch(listing.messageId);
+    await message.edit({
+      embeds: [listingEmbed(listing)],
+      components: [listingButtons(listing.id, false, listing.type)],
+    });
+  } catch (error) {
+    console.warn(`[Mercado Drakoria] Nao foi possivel atualizar timer do anuncio ${listing.id}:`, error.message);
+  }
+}
+
 module.exports = {
   createListing,
   sendInterest,
   closeListing,
   showMyListings,
   editListingAsClosed,
+  editListingAsActive,
   closeConversation,
   requestListingImage,
 };
