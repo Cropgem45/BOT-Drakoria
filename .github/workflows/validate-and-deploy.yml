@@ -95,10 +95,56 @@ jobs:
           ssh -o StrictHostKeyChecking=accept-new "$VPS_USER@$VPS_HOST" "DEPLOY_BOT='$DEPLOY_BOT' DEPLOY_MARKETPLACE='$DEPLOY_MARKETPLACE' bash -s" <<'REMOTE'
           set -euo pipefail
           if [[ "$DEPLOY_BOT" == "true" ]]; then
-            cd /var/www/bot
+            BOT_DEPLOY_DIR=/var/www/bot-deploy
+            BOT_RUNTIME_DIR=/var/lib/drakoria-bot
+            if [[ ! -d "$BOT_DEPLOY_DIR/.git" ]]; then
+              git clone --branch main --single-branch https://github.com/Cropgem45/BOT-Drakoria.git "$BOT_DEPLOY_DIR"
+            fi
+            mkdir -p "$BOT_RUNTIME_DIR/data" "$BOT_RUNTIME_DIR/logs"
+            if [[ -f /var/www/bot/data/drakoria.sqlite3 && ! -f "$BOT_RUNTIME_DIR/data/drakoria.sqlite3" ]]; then
+              cp -a /var/www/bot/data/. "$BOT_RUNTIME_DIR/data/"
+            fi
+            if [[ ! -f "$BOT_DEPLOY_DIR/.env" && -f /var/www/bot/.env ]]; then
+              cp /var/www/bot/.env "$BOT_DEPLOY_DIR/.env"
+            fi
+            if grep -q '^DATABASE_PATH=' "$BOT_DEPLOY_DIR/.env"; then
+              sed -i "s|^DATABASE_PATH=.*|DATABASE_PATH=$BOT_RUNTIME_DIR/data/drakoria.sqlite3|" "$BOT_DEPLOY_DIR/.env"
+            else
+              printf '\nDATABASE_PATH=%s\n' "$BOT_RUNTIME_DIR/data/drakoria.sqlite3" >> "$BOT_DEPLOY_DIR/.env"
+            fi
+            cd "$BOT_DEPLOY_DIR"
             git fetch origin main
             git pull --ff-only origin main
-            if [[ -x .venv/bin/pip ]]; then .venv/bin/pip install -r requirements.txt; fi
+            if [[ ! -x .venv/bin/pip ]]; then python3 -m venv .venv; fi
+            .venv/bin/pip install -r requirements.txt
+            cat >/etc/systemd/system/drakoria-bot.service <<'SERVICE'
+[Unit]
+Description=Bot Drakoria (Discord) - /var/www/bot-deploy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/www/bot-deploy
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/var/www/bot-deploy/.env
+ExecStart=/var/www/bot-deploy/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/bot-deploy /var/lib/drakoria-bot
+StandardOutput=append:/var/lib/drakoria-bot/logs/bot.out.log
+StandardError=append:/var/lib/drakoria-bot/logs/bot.err.log
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+            systemctl daemon-reload
             systemctl restart drakoria-bot.service
             systemctl is-active --quiet drakoria-bot.service
           fi

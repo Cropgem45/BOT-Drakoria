@@ -6,6 +6,7 @@ Checklist rapido para rotina de operacao e pos-deploy.
 
 - Ler o [VPS Deploy Runbook](./vps_deploy_runbook.md) antes de qualquer push que altere bot, site ou infraestrutura.
 - Confirmar qual alvo vai mudar: bot, site ou ambos.
+- Se for bot, considerar `/var/www/bot-deploy` como o código ativo e `/var/lib/drakoria-bot` como o estado persistente.
 - Evitar limpeza agressiva na VPS sem registrar o estado dos arquivos primeiro.
 - Se o deploy envolver a VPS, conferir depois se `drakoria-bot.service` e `drakoria-site` continuam saudaveis.
 
