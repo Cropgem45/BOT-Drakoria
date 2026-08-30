@@ -118,32 +118,32 @@ jobs:
             if [[ ! -x .venv/bin/pip ]]; then python3 -m venv .venv; fi
             .venv/bin/pip install -r requirements.txt
             cat >/etc/systemd/system/drakoria-bot.service <<'SERVICE'
-[Unit]
-Description=Bot Drakoria (Discord) - /var/www/bot-deploy
-After=network-online.target
-Wants=network-online.target
+            [Unit]
+            Description=Bot Drakoria (Discord) - /var/www/bot-deploy
+            After=network-online.target
+            Wants=network-online.target
 
-[Service]
-Type=simple
-User=root
-Group=root
-WorkingDirectory=/var/www/bot-deploy
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=/var/www/bot-deploy/.env
-ExecStart=/var/www/bot-deploy/.venv/bin/python bot.py
-Restart=always
-RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
-ProtectHome=true
-ReadWritePaths=/var/www/bot-deploy /var/lib/drakoria-bot
-StandardOutput=append:/var/lib/drakoria-bot/logs/bot.out.log
-StandardError=append:/var/lib/drakoria-bot/logs/bot.err.log
+            [Service]
+            Type=simple
+            User=root
+            Group=root
+            WorkingDirectory=/var/www/bot-deploy
+            Environment=PYTHONUNBUFFERED=1
+            EnvironmentFile=/var/www/bot-deploy/.env
+            ExecStart=/var/www/bot-deploy/.venv/bin/python bot.py
+            Restart=always
+            RestartSec=5
+            NoNewPrivileges=true
+            PrivateTmp=true
+            ProtectSystem=full
+            ProtectHome=true
+            ReadWritePaths=/var/www/bot-deploy /var/lib/drakoria-bot
+            StandardOutput=append:/var/lib/drakoria-bot/logs/bot.out.log
+            StandardError=append:/var/lib/drakoria-bot/logs/bot.err.log
 
-[Install]
-WantedBy=multi-user.target
-SERVICE
+            [Install]
+            WantedBy=multi-user.target
+          SERVICE
             systemctl daemon-reload
             systemctl restart drakoria-bot.service
             systemctl is-active --quiet drakoria-bot.service
