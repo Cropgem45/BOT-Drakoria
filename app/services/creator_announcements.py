@@ -22,6 +22,8 @@ class CreatorContent:
 
 
 class CreatorAnnouncementService:
+    """Monitora conteúdos dos criadores e publica anúncios sem duplicação."""
+
     def __init__(self, bot: Any) -> None:
         self.bot = bot
         self.log = logging.getLogger("drakoria.creator_announcements")
