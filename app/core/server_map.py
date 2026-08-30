@@ -243,6 +243,101 @@ class ServerMap:
     def beta_program_generate_tester_card(self) -> bool:
         return bool(self.beta_program().get("generate_tester_card", True))
 
+    def server_status(self) -> dict[str, Any]:
+        return self.config.get("server_status", {})
+
+    def server_status_enabled(self) -> bool:
+        return bool(self.server_status().get("enabled", False))
+
+    def server_status_channel_id(self) -> int | None:
+        return self._coerce_id(self.server_status().get("channel_id"))
+
+    def server_status_update_interval_seconds(self) -> int:
+        return max(30, int(self.server_status().get("update_interval_seconds", 60)))
+
+    def server_status_name(self) -> str:
+        raw = self.server_status().get("name")
+        return str(raw).strip() if isinstance(raw, str) and raw.strip() else "DRAKORIA MMORPG"
+
+    def server_status_state(self) -> str:
+        raw = self.server_status().get("status")
+        return str(raw).strip() if isinstance(raw, str) and raw.strip() else "Online"
+
+    def server_status_players_source(self) -> str:
+        raw = str(self.server_status().get("players_source", "members")).strip().lower()
+        return raw if raw in {"members", "voice", "manual", "minecraft"} else "members"
+
+    def server_status_minecraft_host(self) -> str | None:
+        raw = self.server_status().get("minecraft_host")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        return raw.strip()
+
+    def server_status_minecraft_port(self) -> int:
+        return int(self.server_status().get("minecraft_port", 25565))
+
+    def server_status_minecraft_timeout_seconds(self) -> float:
+        return max(1.0, float(self.server_status().get("minecraft_timeout_seconds", 5)))
+
+    def server_status_manual_players_online(self) -> int:
+        return max(0, int(self.server_status().get("manual_players_online", 0)))
+
+    def server_status_max_players(self) -> int | None:
+        raw = self.server_status().get("max_players")
+        if raw in (None, "", 0):
+            return None
+        return max(1, int(raw))
+
+    def server_status_voice_channel_ids(self) -> list[int]:
+        return [int(channel_id) for channel_id in self.server_status().get("voice_channel_ids", [])]
+
+    def server_status_description(self) -> str:
+        raw = self.server_status().get("description")
+        return str(raw).strip() if isinstance(raw, str) and raw.strip() else "Acompanhe aqui o estado oficial do reino."
+
+    def discord_guilds(self) -> dict[str, Any]:
+        return self.config.get("discord_guilds", {})
+
+    def discord_guilds_enabled(self) -> bool:
+        return bool(self.discord_guilds().get("enabled", False))
+
+    def discord_guilds_auto_approve_creation(self) -> bool:
+        return bool(self.discord_guilds().get("auto_approve_creation", False))
+
+    def discord_guilds_recruitment_channel_id(self) -> int | None:
+        return self._coerce_id(self.discord_guilds().get("recruitment_channel_id"))
+
+    def discord_guilds_mural_channel_id(self) -> int | None:
+        return self._coerce_id(self.discord_guilds().get("mural_channel_id"))
+
+    def discord_guilds_staff_review_channel_id(self) -> int | None:
+        return self._coerce_id(self.discord_guilds().get("staff_review_channel_id"))
+
+    def discord_guilds_allowed_emojis(self) -> list[str]:
+        return [str(item).strip() for item in self.discord_guilds().get("allowed_emojis", []) if str(item).strip()]
+
+    def discord_guilds_staff_exempt_role_ids(self) -> list[int]:
+        return [int(role_id) for role_id in self.discord_guilds().get("staff_exempt_role_ids", [])]
+
+    def discord_guilds_nickname_style(self) -> str:
+        style = str(self.discord_guilds().get("nickname_style", "full")).strip().lower()
+        return style if style in {"full", "tag"} else "full"
+
+    def discord_guilds_min_name_length(self) -> int:
+        return max(1, int(self.discord_guilds().get("min_name_length", 3)))
+
+    def discord_guilds_max_name_length(self) -> int:
+        return max(self.discord_guilds_min_name_length(), int(self.discord_guilds().get("max_name_length", 24)))
+
+    def discord_guilds_rename_cooldown_hours(self) -> int:
+        return max(0, int(self.discord_guilds().get("rename_cooldown_hours", 72)))
+
+    def discord_guilds_emblem_cooldown_hours(self) -> int:
+        return max(0, int(self.discord_guilds().get("emblem_cooldown_hours", 24)))
+
+    def discord_guilds_minimum_members_for_officialization(self) -> int:
+        return max(0, int(self.discord_guilds().get("minimum_members_for_officialization", 3)))
+
     def announcements(self) -> dict[str, Any]:
         return self.config.get("announcements", {})
 
