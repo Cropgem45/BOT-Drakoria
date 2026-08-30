@@ -30,6 +30,7 @@ class Database:
         "beta_quota_panel_state",
         "beta_influencer_codes",
         "beta_tester_applications",
+        "creator_announcements",
     )
 
     def __init__(self, path: Path) -> None:
@@ -378,6 +379,17 @@ class Database:
                 ON member_registration_sessions (guild_id, user_id)
                 WHERE status = 'in_progress';
 
+                CREATE TABLE IF NOT EXISTS creator_announcements (
+                    platform TEXT NOT NULL,
+                    content_id TEXT NOT NULL,
+                    creator_id TEXT NOT NULL,
+                    message_id INTEGER,
+                    announced_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (platform, content_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_creator_announcements_creator
+                ON creator_announcements (platform, creator_id, announced_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_beta_tester_applications_guild_status
                 ON beta_tester_applications (guild_id, status, created_at DESC);
 
@@ -2923,4 +2935,31 @@ class Database:
                 updated_at = excluded.updated_at
             """,
             (guild_id, channel_id, message_id),
+        )
+    async def creator_announcement_exists(self, platform: str, content_id: str) -> bool:
+        conn = await self.connect()
+        try:
+            row = await self.fetchone(
+                conn,
+                "SELECT 1 FROM creator_announcements WHERE platform = ? AND content_id = ?",
+                (platform, content_id),
+            )
+        finally:
+            await conn.close()
+        return row is not None
+
+    async def save_creator_announcement(
+        self,
+        platform: str,
+        content_id: str,
+        creator_id: str,
+        message_id: int,
+    ) -> None:
+        await self._run_write(
+            """
+            INSERT OR IGNORE INTO creator_announcements
+                (platform, content_id, creator_id, message_id)
+            VALUES (?, ?, ?, ?)
+            """,
+            (platform, content_id, creator_id, message_id),
         )

@@ -20,6 +20,7 @@ from app.services.diagnostics import HealthcheckService
 from app.services.beta_program import BetaProgramService
 from app.services.donaters import DonaterService
 from app.services.discord_guilds import DiscordGuildService
+from app.services.creator_announcements import CreatorAnnouncementService
 from app.services.member_registration import MemberRegistrationService
 from app.services.points import PointService
 from app.services.registration import RegistrationService
@@ -40,6 +41,7 @@ COGS = [
     "app.cogs.donaters",
     "app.cogs.discord_guilds",
     "app.cogs.server_status",
+    "app.cogs.creator_announcements",
 ]
 
 
@@ -66,6 +68,7 @@ class DrakoriaBot(commands.Bot):
         self.beta_program_service = BetaProgramService(self)
         self.discord_guild_service = DiscordGuildService(self)
         self.server_status_service = ServerStatusService(self)
+        self.creator_announcement_service = CreatorAnnouncementService(self)
         self.ticket_service = TicketService(self)
         self.donater_service = DonaterService(self)
         self.healthcheck_service = HealthcheckService(self)
@@ -174,6 +177,10 @@ class DrakoriaBot(commands.Bot):
 
     async def run_async(self) -> None:
         await self.start(self.runtime.token)
+
+    async def close(self) -> None:
+        await self.creator_announcement_service.close()
+        await super().close()
 
     async def on_voice_state_update(
         self,

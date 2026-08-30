@@ -208,6 +208,21 @@
     "send_dm_on_rejection": true,
     "generate_tester_card": true
   },
+  "creator_announcements": {
+    "enabled": true,
+    "channel_id": 1508132406199324692,
+    "keyword": "Drakoria",
+    "interval_seconds": 60,
+    "mention_everyone": true,
+    "twitch": [
+      {"login": "diogompw", "display_name": "Diogo MPW", "ambassador": true},
+      {"login": "davim_gg", "display_name": "DaviM GG", "ambassador": false}
+    ],
+    "youtube": [
+      {"handle": "@sirlopes_br", "display_name": "Sir Lopes"},
+      {"handle": "@raposo_ttv", "display_name": "Raposo"}
+    ]
+  },
   "staff_timeclock": {
     "enabled": true,
     "panel_channel_id": 1487647499161309285,
