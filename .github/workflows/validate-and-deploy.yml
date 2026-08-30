@@ -1,0 +1,113 @@
+name: Validate and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate-bot:
+    name: Validate bot
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(join(github.event.head_commit.modified, ' '), 'app/') || contains(join(github.event.head_commit.modified, ' '), 'bot.py') || contains(join(github.event.head_commit.modified, ' '), 'requirements.txt') || contains(join(github.event.head_commit.modified, ' '), 'tests/') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Compile Python
+        run: python -m compileall -q app bot.py
+      - name: Run tests
+        run: python -m pytest -q
+
+  validate-marketplace:
+    name: Validate marketplace
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(join(github.event.head_commit.modified, ' '), 'marketplace/') }}
+    defaults:
+      run:
+        working-directory: marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: marketplace/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Check JavaScript
+        run: npm run check
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: [validate-bot, validate-marketplace]
+    if: >-
+      ${{
+        always() &&
+        (needs.validate-bot.result == 'success' || needs.validate-bot.result == 'skipped') &&
+        (needs.validate-marketplace.result == 'success' || needs.validate-marketplace.result == 'skipped')
+      }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Detect changed services
+        id: changes
+        shell: bash
+        run: |
+          changed="$(git diff --name-only HEAD^ HEAD)"
+          {
+            echo "bot=false"
+            echo "marketplace=false"
+          } >> "$GITHUB_OUTPUT"
+          if echo "$changed" | grep -Eq '^(app/|bot\.py$|requirements\.txt$|tests/)'; then
+            sed -i 's/^bot=false/bot=true/' "$GITHUB_OUTPUT"
+          fi
+          if echo "$changed" | grep -Eq '^marketplace/'; then
+            sed -i 's/^marketplace=false/marketplace=true/' "$GITHUB_OUTPUT"
+          fi
+      - name: Configure SSH
+        if: steps.changes.outputs.bot == 'true' || steps.changes.outputs.marketplace == 'true'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+      - name: Deploy changed services
+        if: steps.changes.outputs.bot == 'true' || steps.changes.outputs.marketplace == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_BOT: ${{ steps.changes.outputs.bot }}
+          DEPLOY_MARKETPLACE: ${{ steps.changes.outputs.marketplace }}
+        run: |
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          ssh -o StrictHostKeyChecking=accept-new "$VPS_USER@$VPS_HOST" "DEPLOY_BOT='$DEPLOY_BOT' DEPLOY_MARKETPLACE='$DEPLOY_MARKETPLACE' bash -s" <<'REMOTE'
+          set -euo pipefail
+          if [[ "$DEPLOY_BOT" == "true" ]]; then
+            cd /var/www/bot
+            git fetch origin main
+            git pull --ff-only origin main
+            if [[ -x .venv/bin/pip ]]; then .venv/bin/pip install -r requirements.txt; fi
+            systemctl restart drakoria-bot.service
+            systemctl is-active --quiet drakoria-bot.service
+          fi
+          if [[ "$DEPLOY_MARKETPLACE" == "true" ]]; then
+            cd /var/www/site
+            git fetch origin main
+            git pull --ff-only origin main
+            npm ci --omit=dev
+            pm2 restart drakoria-site
+            pm2 describe drakoria-site | grep -q online
+          fi
+          REMOTE
