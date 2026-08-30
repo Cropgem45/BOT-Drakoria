@@ -2,10 +2,17 @@
 
 Checklist rapido para rotina de operacao e pos-deploy.
 
+## 0. Deploy e VPS
+
+- Ler o [VPS Deploy Runbook](./vps_deploy_runbook.md) antes de qualquer push que altere bot, site ou infraestrutura.
+- Confirmar qual alvo vai mudar: bot, site ou ambos.
+- Evitar limpeza agressiva na VPS sem registrar o estado dos arquivos primeiro.
+- Se o deploy envolver a VPS, conferir depois se `drakoria-bot.service` e `drakoria-site` continuam saudaveis.
+
 ## 1. Startup
 
 - Confirmar `.env` valido.
-- Executar `python bot.py`.
+- Executar `python bot.py` (com auto-restart padrao a cada mudanca nos arquivos monitorados).
 - Verificar ausencia de erro de config no terminal.
 - Rodar `/admin healthcheck`.
 
