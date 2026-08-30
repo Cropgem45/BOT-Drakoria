@@ -3,6 +3,14 @@
 from typing import Any
 
 import discord
+from app.core.discord_guild_views import (
+    DiscordGuildApplicationReviewView,
+    DiscordGuildEmblemReviewView,
+    DiscordGuildInviteView,
+    DiscordGuildLeaderPanelView,
+    DiscordGuildMuralView,
+    DiscordGuildRecruitmentView,
+)
 
 
 class ViewFactory:
@@ -27,6 +35,29 @@ class ViewFactory:
         self.bot.registered_persistent_views["ticket_panel"] = 1
         self.bot.add_view(TicketControlView(self.bot))
         self.bot.registered_persistent_views["ticket_controls"] = 1
+        if getattr(self.bot.server_map, "discord_guilds_enabled", lambda: False)():
+            self.bot.add_view(DiscordGuildMuralView(self.bot))
+            self.bot.registered_persistent_views["discord_guild_mural"] = 1
+            recruitment_count = 0
+            for profile in await self.bot.db.list_discord_guild_profiles(self.bot.server_map.guild_id()):
+                self.bot.add_view(DiscordGuildRecruitmentView(self.bot, int(profile["id"])))
+                recruitment_count += 1
+            self.bot.registered_persistent_views["discord_guild_recruitment"] = recruitment_count
+            application_count = 0
+            for application_id in await self.bot.db.list_pending_discord_guild_application_ids(self.bot.server_map.guild_id()):
+                self.bot.add_view(DiscordGuildApplicationReviewView(self.bot, application_id))
+                application_count += 1
+            self.bot.registered_persistent_views["discord_guild_app_reviews"] = application_count
+            emblem_count = 0
+            for review_id in await self.bot.db.list_pending_discord_guild_emblem_review_ids():
+                self.bot.add_view(DiscordGuildEmblemReviewView(self.bot, review_id))
+                emblem_count += 1
+            self.bot.registered_persistent_views["discord_guild_emblem_reviews"] = emblem_count
+            invite_count = 0
+            for invite_id in await self.bot.db.list_pending_discord_guild_invite_ids():
+                self.bot.add_view(DiscordGuildInviteView(self.bot, invite_id))
+                invite_count += 1
+            self.bot.registered_persistent_views["discord_guild_invites"] = invite_count
         beta_review_count = 0
         for application_id in await self.bot.db.list_pending_beta_tester_application_ids(self.bot.server_map.guild_id()):
             self.bot.add_view(BetaApplicationReviewView(self.bot, application_id))
@@ -59,6 +90,24 @@ class ViewFactory:
 
     def build_ticket_control_view(self) -> discord.ui.View:
         return TicketControlView(self.bot)
+
+    def build_discord_guild_application_review_view(self, application_id: int) -> discord.ui.View:
+        return DiscordGuildApplicationReviewView(self.bot, application_id)
+
+    def build_discord_guild_emblem_review_view(self, review_id: int) -> discord.ui.View:
+        return DiscordGuildEmblemReviewView(self.bot, review_id)
+
+    def build_discord_guild_invite_view(self, invite_id: int) -> discord.ui.View:
+        return DiscordGuildInviteView(self.bot, invite_id)
+
+    def build_discord_guild_recruitment_view(self, guild_profile_id: int) -> discord.ui.View:
+        return DiscordGuildRecruitmentView(self.bot, guild_profile_id)
+
+    def build_discord_guild_mural_view(self) -> discord.ui.View:
+        return DiscordGuildMuralView(self.bot)
+
+    def build_discord_guild_leader_panel_view(self) -> discord.ui.View:
+        return DiscordGuildLeaderPanelView(self.bot)
 
 
 class RegistrationPanelView(discord.ui.View):
@@ -626,12 +675,12 @@ class BetaInfluencerCodeModal(discord.ui.Modal, title="Beta Fechado | Código �
                     ephemeral=True,
                 )
                 return
-            result = await self.bot.beta_program_service.start_or_resume_application(
+            result = await self.bot.beta_program_service.redeem_influencer_code_without_form(
                 interaction,
                 interaction.user,
                 influencer_code=self.influencer_code.value,
             )
-            if result.status in {"already_approved", "already_pending", "blocked_reapply"}:
+            if result.status in {"already_approved", "blocked_reapply"}:
                 await interaction.response.send_message(
                     embed=self.bot.embeds.warning("🧪 Cadastro Beta", result.detail),
                     ephemeral=True,
@@ -641,13 +690,12 @@ class BetaInfluencerCodeModal(discord.ui.Modal, title="Beta Fechado | Código �
                 raise RuntimeError("Não foi possível abrir candidatura beta.")
             await interaction.response.send_message(
                 embed=self.bot.embeds.success(
-                    "✅ Convite Validado",
+                    "✅ Acesso Beta Liberado",
                     (
-                        "Seu código foi vinculado à candidatura beta e uma vaga foi reservada para você.\n"
-                        "Clique em continuar para responder as etapas. 📝"
+                        "Seu código foi validado e a vaga beta foi liberada automaticamente.\n"
+                        "O cargo Beta Tester e a carteirinha foram processados pelo bot. 🎟️"
                     ),
                 ),
-                view=BetaProgramContinueView(self.bot),
                 ephemeral=True,
             )
         except RuntimeError as exc:
