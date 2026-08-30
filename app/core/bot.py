@@ -124,6 +124,16 @@ class DrakoriaBot(commands.Bot):
             except Exception:
                 self.log.exception("Falha ao sincronizar painel do programa beta no on_ready.")
             try:
+                if self.server_map.server_status_enabled():
+                    await self.server_status_service.bootstrap(guild)
+            except Exception:
+                self.log.exception("Falha ao sincronizar painel de status do servidor no on_ready.")
+            try:
+                if self.server_map.discord_guilds_enabled():
+                    await self.discord_guild_service.bootstrap(guild)
+            except Exception:
+                self.log.exception("Falha ao sincronizar sistema de guildas do Discord no on_ready.")
+            try:
                 await self.donater_service.bootstrap(guild)
             except Exception:
                 self.log.exception("Falha ao sincronizar Trono dos Patronos no on_ready.")
