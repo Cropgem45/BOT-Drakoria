@@ -6,6 +6,7 @@ Referencia dos comandos ativos no fechamento.
 
 - `healthcheck`: auditoria operacional completa.
 - `server_map`: mapa de IDs configurados e recursos resolvidos.
+- `ping`: latência do bot e tempo de resposta do comando.
 
 ## /cadastro
 

@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+import time
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -100,6 +102,25 @@ class AdministrationCog(
         embed = self.bot.healthcheck_service.build_embed(guild, entries)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    @app_commands.command(name="ping", description="Mede a latência do bot e do comando")
+    @app_commands.guild_only()
+    async def ping(self, interaction: discord.Interaction) -> None:
+        if not self.bot.permission_service.has(interaction.user, "view_server_map"):
+            raise app_commands.CheckFailure("Não possuis acesso ao ping administrativo.")
+
+        started_at = time.perf_counter()
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        command_latency_ms = round((time.perf_counter() - started_at) * 1000)
+        websocket_latency_ms = round(self.bot.latency * 1000) if self.bot.latency else 0
+        embed = self.bot.embeds.make(
+            title="Ping de Drakoria",
+            description=(
+                f"Latência do websocket: `{websocket_latency_ms} ms`\n"
+                f"Tempo do comando: `{command_latency_ms} ms`"
+            ),
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         if interaction.response.is_done():
             await interaction.followup.send(
@@ -115,5 +136,3 @@ class AdministrationCog(
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(AdministrationCog(bot), guild=discord.Object(id=bot.server_map.guild_id()))
-
-
