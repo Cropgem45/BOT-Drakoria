@@ -19,10 +19,12 @@ from app.repositories.database import Database
 from app.services.diagnostics import HealthcheckService
 from app.services.beta_program import BetaProgramService
 from app.services.donaters import DonaterService
+from app.services.discord_guilds import DiscordGuildService
 from app.services.member_registration import MemberRegistrationService
 from app.services.points import PointService
 from app.services.registration import RegistrationService
 from app.services.staff_timeclock_service import StaffTimeclockService
+from app.services.server_status import ServerStatusService
 from app.services.tickets import TicketService
 
 
@@ -36,6 +38,8 @@ COGS = [
     "app.cogs.announcements",
     "app.cogs.tickets",
     "app.cogs.donaters",
+    "app.cogs.discord_guilds",
+    "app.cogs.server_status",
 ]
 
 
@@ -60,10 +64,13 @@ class DrakoriaBot(commands.Bot):
         self.registration_service = RegistrationService(self)
         self.member_registration_service = MemberRegistrationService(self)
         self.beta_program_service = BetaProgramService(self)
+        self.discord_guild_service = DiscordGuildService(self)
+        self.server_status_service = ServerStatusService(self)
         self.ticket_service = TicketService(self)
         self.donater_service = DonaterService(self)
         self.healthcheck_service = HealthcheckService(self)
         self.registered_persistent_views: dict[str, int] = {}
+        self.discord_guild_mural_options: list[dict[str, str]] = []
         self._voice_point_runtime_ready = False
         self.log = logging.getLogger("drakoria.bot")
 
@@ -85,6 +92,12 @@ class DrakoriaBot(commands.Bot):
             "Slash commands sincronizados na guild %s: %s",
             self.server_map.guild_id(),
             ", ".join(sorted(command.name for command in synced_commands)),
+        )
+        self.log.info(
+            "Boot concluido: guild=%s cogs=%d views_persistentes=%d",
+            self.server_map.guild_id(),
+            len(COGS),
+            len(self.registered_persistent_views),
         )
 
     async def on_ready(self) -> None:
