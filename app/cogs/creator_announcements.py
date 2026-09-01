@@ -51,7 +51,7 @@ class CreatorAnnouncementsCog(commands.Cog):
                 description=descricao or "",
             )
             published = await self.bot.creator_announcement_service.announce(content)
-        except (ValueError, discord.HTTPException) as exc:
+        except (ValueError, RuntimeError, discord.HTTPException) as exc:
             await interaction.followup.send(f"Não foi possível divulgar: {exc}", ephemeral=True)
             return
         if published:
