@@ -52,15 +52,15 @@ class CreatorAnnouncementTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("twitch.tv/diogompw", embed.description or "")
 
     async def test_youtube_rss_filters_title_and_description_without_api_key(self) -> None:
-        bot = SimpleNamespace(config={"creator_announcements": {}}, db=self.db)
+        bot = SimpleNamespace(config={"creator_announcements": {"youtube_max_age_hours": 10000}}, db=self.db)
         service = CreatorAnnouncementService(bot)
         service._request_text = AsyncMock(return_value="""<?xml version='1.0'?>
         <feed xmlns='http://www.w3.org/2005/Atom' xmlns:yt='http://www.youtube.com/xml/schemas/2015' xmlns:media='http://search.yahoo.com/mrss/'>
           <author><name>Sir Lopes</name></author>
-          <entry><yt:videoId>video-1</yt:videoId><title>Gameplay DraKoRiA</title>
+          <entry><yt:videoId>video-1</yt:videoId><published>2026-09-01T00:00:00+00:00</published><title>Gameplay DraKoRiA</title>
             <media:group><media:description>Vídeo oficial</media:description><media:thumbnail url='https://img/1.jpg'/></media:group>
           </entry>
-          <entry><yt:videoId>video-2</yt:videoId><title>Outro jogo</title><media:group><media:description>sem palavra</media:description></media:group></entry>
+          <entry><yt:videoId>video-2</yt:videoId><published>2026-08-01T00:00:00+00:00</published><title>Outro jogo</title><media:group><media:description>sem palavra</media:description></media:group></entry>
         </feed>""")
         service._resolve_youtube_channel_id = AsyncMock(return_value="UC123")
 
@@ -68,6 +68,18 @@ class CreatorAnnouncementTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item.content_id for item in results], ["video-1"])
         self.assertEqual(results[0].thumbnail_url, "https://img/1.jpg")
+
+    async def test_youtube_rss_does_not_announce_old_matching_video(self) -> None:
+        bot = SimpleNamespace(config={"creator_announcements": {"youtube_max_age_hours": 48}})
+        service = CreatorAnnouncementService(bot)
+        service._request_text = AsyncMock(return_value="""<feed xmlns='http://www.w3.org/2005/Atom' xmlns:yt='http://www.youtube.com/xml/schemas/2015'>
+          <entry><yt:videoId>old-video</yt:videoId><published>2026-06-01T00:00:00+00:00</published><title>Drakoria antigo</title></entry>
+        </feed>""")
+        service._resolve_youtube_channel_id = AsyncMock(return_value="UC123")
+
+        results = await service._poll_youtube_rss({"handle": "@sirlopes_br"}, "drakoria")
+
+        self.assertEqual(results, [])
 
     async def test_youtube_handle_resolution_keeps_at_prefix(self) -> None:
         bot = SimpleNamespace(config={"creator_announcements": {}})

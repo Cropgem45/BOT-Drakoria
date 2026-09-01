@@ -7,6 +7,8 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 from xml.etree import ElementTree
 
@@ -176,11 +178,14 @@ class CreatorAnnouncementService:
         root = ElementTree.fromstring(feed)
         ns = {"atom": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015", "media": "http://search.yahoo.com/mrss/"}
         results: list[CreatorContent] = []
+        max_age_hours = max(1, int(self.config.get("youtube_max_age_hours", 48)))
+        newest_allowed = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
         for entry in root.findall("atom:entry", ns):
             video_id = (entry.findtext("yt:videoId", default="", namespaces=ns) or "").strip()
             title = (entry.findtext("atom:title", default="", namespaces=ns) or "").strip()
             description = (entry.findtext("media:group/media:description", default="", namespaces=ns) or "").strip()
-            if not video_id or keyword not in f"{title}\n{description}".casefold():
+            published = (entry.findtext("atom:published", default="", namespaces=ns) or "").strip()
+            if not video_id or keyword not in f"{title}\n{description}".casefold() or not self._is_recent_youtube_entry(published, newest_allowed):
                 continue
             thumbnail = None
             media_thumbnail = entry.find("media:group/media:thumbnail", ns)
@@ -197,6 +202,21 @@ class CreatorAnnouncementService:
                 description=description,
             ))
         return results
+
+    @staticmethod
+    def _is_recent_youtube_entry(value: str, newest_allowed: datetime) -> bool:
+        if not value:
+            return False
+        try:
+            published_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                published_at = parsedate_to_datetime(value)
+            except (TypeError, ValueError, IndexError):
+                return False
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        return published_at.astimezone(timezone.utc) >= newest_allowed
 
     async def _resolve_youtube_channel_id(self, handle: str) -> str:
         if not handle:
