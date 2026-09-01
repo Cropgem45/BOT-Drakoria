@@ -51,7 +51,7 @@ class CreatorAnnouncementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(embed.color.value, 0xF1C40F)
         self.assertIn("twitch.tv/diogompw", embed.description or "")
 
-    async def test_youtube_rss_filters_title_and_description_without_api_key(self) -> None:
+    async def test_youtube_rss_filters_title_without_api_key(self) -> None:
         bot = SimpleNamespace(config={"creator_announcements": {"youtube_max_age_hours": 10000}}, db=self.db)
         service = CreatorAnnouncementService(bot)
         service._request_text = AsyncMock(return_value="""<?xml version='1.0'?>
@@ -61,6 +61,7 @@ class CreatorAnnouncementTests(unittest.IsolatedAsyncioTestCase):
             <media:group><media:description>Vídeo oficial</media:description><media:thumbnail url='https://img/1.jpg'/></media:group>
           </entry>
           <entry><yt:videoId>video-2</yt:videoId><published>2026-08-01T00:00:00+00:00</published><title>Outro jogo</title><media:group><media:description>sem palavra</media:description></media:group></entry>
+          <entry><yt:videoId>video-3</yt:videoId><published>2026-09-01T00:00:00+00:00</published><title>Vídeo novo</title><media:group><media:description>Drakoria na descrição</media:description></media:group></entry>
         </feed>""")
         service._resolve_youtube_channel_id = AsyncMock(return_value="UC123")
 

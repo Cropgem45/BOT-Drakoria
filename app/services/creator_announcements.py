@@ -185,7 +185,7 @@ class CreatorAnnouncementService:
             title = (entry.findtext("atom:title", default="", namespaces=ns) or "").strip()
             description = (entry.findtext("media:group/media:description", default="", namespaces=ns) or "").strip()
             published = (entry.findtext("atom:published", default="", namespaces=ns) or "").strip()
-            if not video_id or keyword not in f"{title}\n{description}".casefold() or not self._is_recent_youtube_entry(published, newest_allowed):
+            if not video_id or keyword not in title.casefold() or not self._is_recent_youtube_entry(published, newest_allowed):
                 continue
             thumbnail = None
             media_thumbnail = entry.find("media:group/media:thumbnail", ns)
