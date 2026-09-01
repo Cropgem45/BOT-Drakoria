@@ -69,6 +69,16 @@ class CreatorAnnouncementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.content_id for item in results], ["video-1"])
         self.assertEqual(results[0].thumbnail_url, "https://img/1.jpg")
 
+    async def test_youtube_handle_resolution_keeps_at_prefix(self) -> None:
+        bot = SimpleNamespace(config={"creator_announcements": {}})
+        service = CreatorAnnouncementService(bot)
+        service._request_text = AsyncMock(return_value='"channelId":"UC123"')
+
+        result = await service._resolve_youtube_channel_id("@sirlopes_br")
+
+        self.assertEqual(result, "UC123")
+        self.assertIn("https://www.youtube.com/@sirlopes_br", service._request_text.await_args.args[0])
+
     async def test_twitch_public_reader_filters_live_title(self) -> None:
         bot = SimpleNamespace(config={"creator_announcements": {}})
         service = CreatorAnnouncementService(bot)

@@ -203,7 +203,7 @@ class CreatorAnnouncementService:
             return ""
         if handle in self._youtube_channels:
             return self._youtube_channels[handle]
-        page = await self._request_text(f"https://www.youtube.com/{handle.lstrip('@')}", headers={"User-Agent": "DrakoriaBot/1.0"})
+        page = await self._request_text(f"https://www.youtube.com/{handle}", headers={"User-Agent": "DrakoriaBot/1.0"})
         patterns = (
             r'"channelId"\s*:\s*"(UC[\w-]+)"',
             r'<meta[^>]+itemprop=["\']channelId["\'][^>]+content=["\'](UC[\w-]+)',
