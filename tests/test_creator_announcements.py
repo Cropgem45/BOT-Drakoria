@@ -72,7 +72,7 @@ class CreatorAnnouncementTests(unittest.IsolatedAsyncioTestCase):
     async def test_youtube_handle_resolution_keeps_at_prefix(self) -> None:
         bot = SimpleNamespace(config={"creator_announcements": {}})
         service = CreatorAnnouncementService(bot)
-        service._request_text = AsyncMock(return_value='"channelId":"UC123"')
+        service._request_text = AsyncMock(return_value='"externalId":"UC123"')
 
         result = await service._resolve_youtube_channel_id("@sirlopes_br")
 

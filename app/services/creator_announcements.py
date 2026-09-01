@@ -206,6 +206,7 @@ class CreatorAnnouncementService:
         page = await self._request_text(f"https://www.youtube.com/{handle}", headers={"User-Agent": "DrakoriaBot/1.0"})
         patterns = (
             r'"channelId"\s*:\s*"(UC[\w-]+)"',
+            r'"(?:externalId|browseId)"\s*:\s*"(UC[\w-]+)"',
             r'<meta[^>]+itemprop=["\']channelId["\'][^>]+content=["\'](UC[\w-]+)',
         )
         channel_id = next((match.group(1) for pattern in patterns if (match := re.search(pattern, page, re.IGNORECASE))), "")
