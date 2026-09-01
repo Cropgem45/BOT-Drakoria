@@ -21,6 +21,7 @@ from app.services.beta_program import BetaProgramService
 from app.services.donaters import DonaterService
 from app.services.discord_guilds import DiscordGuildService
 from app.services.creator_announcements import CreatorAnnouncementService
+from app.services.suggestions import SuggestionService
 from app.services.member_registration import MemberRegistrationService
 from app.services.points import PointService
 from app.services.registration import RegistrationService
@@ -42,6 +43,7 @@ COGS = [
     "app.cogs.discord_guilds",
     "app.cogs.server_status",
     "app.cogs.creator_announcements",
+    "app.cogs.suggestions",
 ]
 
 
@@ -69,6 +71,7 @@ class DrakoriaBot(commands.Bot):
         self.discord_guild_service = DiscordGuildService(self)
         self.server_status_service = ServerStatusService(self)
         self.creator_announcement_service = CreatorAnnouncementService(self)
+        self.suggestion_service = SuggestionService(self)
         self.ticket_service = TicketService(self)
         self.donater_service = DonaterService(self)
         self.healthcheck_service = HealthcheckService(self)
@@ -122,6 +125,11 @@ class DrakoriaBot(commands.Bot):
             self._voice_point_runtime_ready = True
             await self.point_service.bootstrap_runtime()
             await self.staff_timeclock_service.bootstrap()
+        if guild is not None and self.server_map.suggestions_enabled():
+            try:
+                await self.suggestion_service.publish_panel(guild)
+            except Exception:
+                self.log.exception("Falha ao sincronizar Central de Sugestões no on_ready.")
         if guild is not None:
             try:
                 if self.server_map.registration_panel_enabled():

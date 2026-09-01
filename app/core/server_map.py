@@ -19,6 +19,21 @@ class ServerMap:
     def channel(self, key: str) -> int | None:
         return self._coerce_id(self.config.get("channels", {}).get(key))
 
+    def suggestions(self) -> dict[str, Any]:
+        return self.config.get("suggestions", {})
+
+    def suggestions_enabled(self) -> bool:
+        return bool(self.suggestions().get("enabled", True))
+
+    def suggestions_panel_channel_id(self) -> int | None:
+        return self._coerce_id(self.suggestions().get("panel_channel_id"))
+
+    def suggestions_output_channel_id(self) -> int | None:
+        return self._coerce_id(self.suggestions().get("output_channel_id"))
+
+    def suggestions_log_channel_id(self) -> int | None:
+        return self._coerce_id(self.suggestions().get("log_channel_id"))
+
     def category(self, key: str) -> int | None:
         return self._coerce_id(self.config.get("categories", {}).get(key))
 

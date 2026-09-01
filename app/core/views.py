@@ -11,6 +11,7 @@ from app.core.discord_guild_views import (
     DiscordGuildMuralView,
     DiscordGuildRecruitmentView,
 )
+from app.core.suggestion_views import SuggestionPanelView, SuggestionVoteView
 
 
 class ViewFactory:
@@ -35,6 +36,10 @@ class ViewFactory:
         self.bot.registered_persistent_views["ticket_panel"] = 1
         self.bot.add_view(TicketControlView(self.bot))
         self.bot.registered_persistent_views["ticket_controls"] = 1
+        self.bot.add_view(SuggestionPanelView(self.bot))
+        self.bot.registered_persistent_views["suggestion_panel"] = 1
+        self.bot.add_view(SuggestionVoteView(self.bot))
+        self.bot.registered_persistent_views["suggestion_votes"] = 1
         if getattr(self.bot.server_map, "discord_guilds_enabled", lambda: False)():
             self.bot.add_view(DiscordGuildMuralView(self.bot))
             self.bot.registered_persistent_views["discord_guild_mural"] = 1
@@ -90,6 +95,12 @@ class ViewFactory:
 
     def build_ticket_control_view(self) -> discord.ui.View:
         return TicketControlView(self.bot)
+
+    def build_suggestion_panel_view(self) -> discord.ui.View:
+        return SuggestionPanelView(self.bot)
+
+    def build_suggestion_vote_view(self, counts: dict[str, int] | None = None) -> discord.ui.View:
+        return SuggestionVoteView(self.bot, counts=counts)
 
     def build_discord_guild_application_review_view(self, application_id: int) -> discord.ui.View:
         return DiscordGuildApplicationReviewView(self.bot, application_id)
