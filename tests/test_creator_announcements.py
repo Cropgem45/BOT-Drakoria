@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import discord
 
@@ -49,3 +50,44 @@ class CreatorAnnouncementTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Embaixador Drakoria", embed.title or "")
         self.assertEqual(embed.color.value, 0xF1C40F)
         self.assertIn("twitch.tv/diogompw", embed.description or "")
+
+    async def test_youtube_rss_filters_title_and_description_without_api_key(self) -> None:
+        bot = SimpleNamespace(config={"creator_announcements": {}}, db=self.db)
+        service = CreatorAnnouncementService(bot)
+        service._request_text = AsyncMock(return_value="""<?xml version='1.0'?>
+        <feed xmlns='http://www.w3.org/2005/Atom' xmlns:yt='http://www.youtube.com/xml/schemas/2015' xmlns:media='http://search.yahoo.com/mrss/'>
+          <author><name>Sir Lopes</name></author>
+          <entry><yt:videoId>video-1</yt:videoId><title>Gameplay DraKoRiA</title>
+            <media:group><media:description>Vídeo oficial</media:description><media:thumbnail url='https://img/1.jpg'/></media:group>
+          </entry>
+          <entry><yt:videoId>video-2</yt:videoId><title>Outro jogo</title><media:group><media:description>sem palavra</media:description></media:group></entry>
+        </feed>""")
+        service._resolve_youtube_channel_id = AsyncMock(return_value="UC123")
+
+        results = await service._poll_youtube_rss({"handle": "@sirlopes_br", "display_name": "Sir Lopes"}, "drakoria")
+
+        self.assertEqual([item.content_id for item in results], ["video-1"])
+        self.assertEqual(results[0].thumbnail_url, "https://img/1.jpg")
+
+    async def test_twitch_public_reader_filters_live_title(self) -> None:
+        bot = SimpleNamespace(config={"creator_announcements": {}})
+        service = CreatorAnnouncementService(bot)
+        service._request_text = AsyncMock(return_value='''<meta property="og:image" content="https://img/live.jpg">
+        {"isLiveBroadcast":true,"stream_id":"123","stream_title":"Live DraKoRiA agora"}''')
+
+        result = await service._poll_twitch_public({"login": "diogompw", "display_name": "Diogo MPW", "ambassador": True}, "drakoria")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.content_id, "123")
+        self.assertTrue(result.is_ambassador)
+
+    def test_manual_content_is_deterministic_and_marks_ambassador(self) -> None:
+        bot = SimpleNamespace(config={"creator_announcements": {"twitch": [{"login": "diogompw", "ambassador": True}]}})
+        service = CreatorAnnouncementService(bot)
+
+        content = service.manual_content(
+            platform="twitch", creator="diogompw", title="Live Drakoria", url="https://twitch.tv/diogompw"
+        )
+
+        self.assertTrue(content.content_id.startswith("manual-"))
+        self.assertTrue(content.is_ambassador)

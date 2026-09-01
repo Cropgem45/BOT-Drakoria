@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 
 
@@ -13,6 +15,49 @@ class CreatorAnnouncementsCog(commands.Cog):
 
     def cog_unload(self) -> None:
         self.poll_loop.cancel()
+
+    @app_commands.command(name="divulgar", description="Publica manualmente uma live ou vídeo de criador")
+    @app_commands.guild_only()
+    @app_commands.describe(
+        plataforma="Plataforma do conteúdo",
+        criador="Nome do criador conforme a configuração",
+        titulo="Título da live ou vídeo",
+        link="Link direto para o conteúdo",
+        descricao="Descrição opcional",
+    )
+    @app_commands.choices(
+        plataforma=[
+            app_commands.Choice(name="Twitch", value="twitch"),
+            app_commands.Choice(name="YouTube", value="youtube"),
+        ]
+    )
+    @app_commands.checks.has_permissions(manage_messages=True)
+    async def divulgar(
+        self,
+        interaction: discord.Interaction,
+        plataforma: app_commands.Choice[str],
+        criador: str,
+        titulo: str,
+        link: str,
+        descricao: str | None = None,
+    ) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            content = self.bot.creator_announcement_service.manual_content(
+                platform=plataforma.value,
+                creator=criador,
+                title=titulo,
+                url=link,
+                description=descricao or "",
+            )
+            published = await self.bot.creator_announcement_service.announce(content)
+        except (ValueError, discord.HTTPException) as exc:
+            await interaction.followup.send(f"Não foi possível divulgar: {exc}", ephemeral=True)
+            return
+        if published:
+            await interaction.followup.send("Conteúdo divulgado com sucesso.", ephemeral=True)
+        else:
+            await interaction.followup.send("Esse link já foi divulgado anteriormente.", ephemeral=True)
 
     @tasks.loop(seconds=60)
     async def poll_loop(self) -> None:
