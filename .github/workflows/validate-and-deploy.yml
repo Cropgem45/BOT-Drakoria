@@ -16,7 +16,6 @@ jobs:
   validate-bot:
     name: Validate bot
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(join(github.event.head_commit.modified, ' '), 'app/') || contains(join(github.event.head_commit.added, ' '), 'app/') || contains(join(github.event.head_commit.modified, ' '), 'bot.py') || contains(join(github.event.head_commit.added, ' '), 'bot.py') || contains(join(github.event.head_commit.modified, ' '), 'requirements.txt') || contains(join(github.event.head_commit.added, ' '), 'requirements.txt') || contains(join(github.event.head_commit.modified, ' '), 'tests/') || contains(join(github.event.head_commit.added, ' '), 'tests/') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,7 +31,6 @@ jobs:
   validate-marketplace:
     name: Validate marketplace
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(join(github.event.head_commit.modified, ' '), 'marketplace/') || contains(join(github.event.head_commit.added, ' '), 'marketplace/') }}
     defaults:
       run:
         working-directory: marketplace
